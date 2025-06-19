@@ -1,6 +1,11 @@
+import os
+
 import requests
 import json
+from dotenv import load_dotenv
+load_dotenv()
 
+API_KEY = os.getenv("APIKeyOpenWeatherMap")
 def get_air_quality(latitude, longitude, api_key):
   """
   Retrieves air quality data from OpenWeatherMap API.
@@ -28,7 +33,7 @@ def get_air_quality(latitude, longitude, api_key):
 # Replace with your actual latitude, longitude, and API key
 latitude = 47.3769
 longitude = 8.5417
-api_key = "d71cc8fc52d1a3f2fe45a1fa4d34f042"
+api_key = API_KEY
 
 air_quality_data = get_air_quality(latitude, longitude, api_key)
 
