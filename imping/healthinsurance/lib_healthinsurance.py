@@ -1,6 +1,8 @@
-import os.path
 from typing import Optional, List, Tuple
 import pandas as pd
+import requests
+from io import StringIO
+import datetime
 
 
 def LoadData(pth: str) -> Optional[pd.DataFrame]:
@@ -58,7 +60,7 @@ def GetRegion(Data: pd.DataFrame, Kanton: str) -> Optional[List[str]]:
     return regions.tolist()
 
 
-def GetMunicipalities(pth: str, Kanton: str, Region: str) -> Optional[List[str]]:
+def GetMunicipalities_MultipleFeeRegions(pth: str, Kanton: str, Region: str) -> Optional[List[str]]:
     """
     Loads a municipality list from an Excel file and returns distinct municipalities (Gemeinden)
     for a given canton and region.
@@ -98,6 +100,35 @@ def GetMunicipalities(pth: str, Kanton: str, Region: str) -> Optional[List[str]]
         print(f"❌ Unexpected error: {e}")
 
     return None
+
+def GetMunicipalities_PerCanton(Canton: str) -> pd.DataFrame:
+    # Get today's date in DD-MM-YYYY format
+    today = datetime.datetime.today().strftime("%d-%m-%Y")
+
+    # Construct the URL
+    url = f"https://www.agvchapp.bfs.admin.ch/api/communes/levels?date={today}"
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    response = requests.get(url, headers=headers)
+    try:
+        # Try utf-8 first
+        data = response.json()
+    except Exception:
+        # Try latin-1
+        try:
+            data = response.content.decode("latin-1")
+        except Exception as e:
+            print("latin-1 decode also failed.")
+            raise e
+        # Try parsing as JSON after latin-1 decode (if content is actually JSON)
+
+    df = pd.read_csv(StringIO(data))
+    return df[df["Canton"] == Canton]["Name"].values.tolist()
+
 
 
 def GetKantonRegionFromGemeinde(pth: str, Gemeinde: str) -> Optional[Tuple[str, str]]:
@@ -278,57 +309,3 @@ def GetKVNameFromBAGNumber(BAGNumber: int, pth: str) -> str:
             return None
     print(f"❌ None of the possible sheets found in the file.")
     return None
-
-if __name__ == '__main__':
-    swiss_cantons_abbr_to_name = {
-        "AG": "Aargau",
-        "AR": "Appenzell Ausserrhoden",
-        "AI": "Appenzell Innerrhoden",
-        "BL": "Basel-Landschaft",
-        "BS": "Basel-Stadt",
-        "BE": "Bern",
-        "FR": "Freiburg",
-        "GE": "Genf",
-        "GL": "Glarus",
-        "GR": "Graubünden",
-        "JU": "Jura",
-        "LU": "Luzern",
-        "NE": "Neuenburg",
-        "NW": "Nidwalden",
-        "OW": "Obwalden",
-        "SH": "Schaffhausen",
-        "SZ": "Schwyz",
-        "SO": "Solothurn",
-        "SG": "St. Gallen",
-        "TI": "Tessin",
-        "TG": "Thurgau",
-        "UR": "Uri",
-        "VD": "Waadt",
-        "VS": "Wallis",
-        "ZG": "Zug",
-        "ZH": "Zürich"
-    }
-
-
-    pth_Fees = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'Prämien_CH.csv')
-    Data = LoadData(pth_Fees)
-    if Data is not None:
-        s_Region = GetRegion(Data, 'BE')
-        pth_Municipy = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'praemienregionen-ab-2025.xlsx')
-        s_Municipy = GetMunicipalities(pth_Municipy, 'BE', s_Region[0])
-
-        Kanton, Region = GetKantonRegionFromGemeinde(pth_Municipy, s_Municipy[0])
-        s_Altersklasse = ['AKL-KIN', 'AKL-JUG', 'AKL_ERW']
-        s_Unfalldeckung = ['MIT-UNF', 'OHN-UNF']
-        vk_Franchise = {'AKL-KIN': ['FRA-0', 'FRA-100','FRA-200', 'FRA-300', 'FRA-400', 'FRA-500', 'FRA-600'], 'AKL-JUG': ['FRA-300', 'FRA-500', 'FRA-1000', 'FRA-1500', 'FRA-2000', 'FRA-2500'], 'AKL_ERW': ['FRA-0', 'FRA-100','FRA-200', 'FRA-300', 'FRA-400', 'FRA-500', 'FRA-600', 'FRA-1000', 'FRA-1500', 'FRA-2000', 'FRA-2500']}
-        # TODO Altersgruppe und Tariftyp hinzufügen
-        s_Tariftyp = ['TAR-BASE', 'TAR-DIV', 'TAR-HMO', 'TAR-HAM'] # Health Maintainance Organization == HMO, HAM == Hausarztmodell
-        # Altersuntergruppe aufsteigend ein, zwei, drei+ aufsteigend immer, aber k4 != 4 Kinder.
-        vk_Altersuntergruppe = GetAlterunterGruppenProVersicherer(Data, Kanton = Kanton, Region = 'PR-REG CH'+Region, Altersklasse=s_Altersklasse[0], Unfalldeckung=s_Unfalldeckung[0], Franchise = vk_Franchise[s_Altersklasse[0]][0], Tariftyp = s_Tariftyp[0])
-        pth_BAGMapping = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'BagNr_Mapping_KV.xlsx')
-        BAG_Number = 8
-        Name_HealthinInsurance = GetKVNameFromBAGNumber(8, pth_BAGMapping)
-
-        AltersGruppe = vk_Altersuntergruppe[BAG_Number][0]
-        Fees = GetFeesByParameters(Data = Data, Kanton = Kanton, Region = 'PR-REG CH'+Region, Altersklasse=s_Altersklasse[0], Unfalldeckung=s_Unfalldeckung[0], Franchise = vk_Franchise[s_Altersklasse[0]][0], Tariftyp = s_Tariftyp[0], Altersgruppe=AltersGruppe)
-        FeePerInsurance = Fees[Fees['Versicherer']==BAG_Number]
