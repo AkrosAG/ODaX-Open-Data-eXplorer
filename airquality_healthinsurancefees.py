@@ -1,11 +1,14 @@
 #%%
 import pandas as pd
-import numpy as np
-import os
-from imping.healthinsurance.lib_healthinsurance import LoadData, GetFeesByParameters, GetKVNameFromBAGNumber, GetAlterunterGruppenProVersicherer, GetRegion, GetKantonRegionFromGemeinde
-from imping.nabel_airquality.openweathermap import get_air_quality
+from dotenv import load_dotenv
+import os, json
+from imping.healthinsurance.lib_healthinsurance import LoadData, GetFeesByParameters, GetKVNameFromBAGNumber, GetAlterunterGruppenProVersicherer, GetRegion, GetKantonRegionFromGemeinde, GetMunicipalities_MultipleFeeRegions
+from imping.nabel_airquality.lib_openweathermap import get_air_quality
+from imping.nabel_airquality.lib_geocoordinates import get_wgs84_municipality
+#%% md
+# 
 #%%
-from imping.healthinsurance.lib_healthinsurance import GetMunicipalities
+from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_PerCanton
 #%% md
 #  # Analysis of the health insurance data
 #%% md
@@ -58,15 +61,19 @@ if Data is not None:
 #%% md
 # The following code outputs which municipalities belong to the fee region PR-REG CH0 of the canton Bern (BE). If you are interested in another fee region or canton, feel free to adjust the sample code. Knowing which municipality is in a fee region enables to detect the extrapolated air pollution as demonstrated later on in this notebook.
 #%%
-if Data is not None:
-    s_Region = GetRegion(Data, 'BE')
-    pth_Municipality = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'praemienregionen-ab-2025.xlsx')
-    s_Municipality = GetMunicipalities(pth_Municipality, 'BE', s_Region[0])
-    print(f"In the fee region in Canton BE, the municipalities belong to: {s_Municipality}")
-    # Finding the canton and fee region based on the name of the municipality can be achieved by the following command:
-    Kanton, Region = GetKantonRegionFromGemeinde(pth_Municipality, s_Municipality[0])
-    print(f"For municipality {s_Municipality[0]}, the canton is {Kanton} and the fee region is {Region}.")
+Canton = 'BS'
 
+if Data is not None:
+    s_Region = GetRegion(Data, Canton)
+    pth_Municipality = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'praemienregionen-ab-2025.xlsx')
+    if len(s_Region) > 1:
+        s_Municipality = GetMunicipalities_MultipleFeeRegions(pth_Municipality, Canton, s_Region[0])
+        # Finding the canton and fee region based on the name of the municipality can be achieved by the following command:
+        Kanton, Region = GetKantonRegionFromGemeinde(pth_Municipality, s_Municipality[0])
+        print(f"For municipality {s_Municipality[0]}, the canton is {Kanton} and the fee region is {Region}.")
+    else:
+        s_Municipality = GetMunicipalities_PerCanton(swiss_cantons_abbr_to_name[Canton])
+    print(f"In the fee region in Canton {Canton}, the municipalities belong to: {s_Municipality}")
 #%% md
 # In Switzerland, there are three age groups, i.e., the group for children AKL-KIN, the group for young adults AKL-JUG, and the group for adults over 25 years AKL-ERW.
 #%%
@@ -121,7 +128,88 @@ print(FeePerInsurance)
 #%% md
 # ## Analysis of the air quality data
 #%% md
-# 
+# First, we focus on the air quality data from the Nationales Beobachtungszentrum für Luftschadstoffe (NABEL). To access this data, the REST-API of openweathermap is accessed. As we know that the health insurance is divided into fee regions. Several municipalities belong to these fee regions. For every municipality, we would like to receive the air quality and therefore, we need to first get the WGS84 geocoordinates for the municipality. This can be achieved via the following code:
 #%%
+lat, lon = get_wgs84_municipality('Wohlen')
+print(f'Wohlen coordinates: latitude={lat}, longitude={lon}')
+#%%
+lat, lon = get_wgs84_municipality('Steinhausen')
+print(f'Steinhausen coordinates: latitude={lat}, longitude={lon}')
+#%% md
+# With these geocoordinates, we can access the openweathermap REST-API. Note, you need to put the API key for the Openweathermap REST-API into your .env file.
+#%%
+load_dotenv()
+API_KEY = os.getenv("APIKeyOpenWeatherMap")
+
+# Replace it with your actual latitude, longitude, and API key
+latitude = lat
+longitude = lon
+
+api_key = API_KEY
+
+air_quality_data = get_air_quality(latitude, longitude, api_key)
+
+if air_quality_data:
+  print(json.dumps(air_quality_data, indent=2))
+#%% md
+# The NABEL also provides historical data which can be manually downloaded from the website. Unfortunately, the openweathermap API for the historical data is not free of charge. Thus, I decided to go with the manual download.
+# In the following, we will have a look at the PM2.5 data.
+#%%
+s_Pollutant = ["CO","CPC","EC","NMVOC","NO2","NOX","O3","PM2.5","PM10","PREC","RAD","SO2","TEMP"]
+fn_Pollutant = s_Pollutant[7]+".csv"
+
+pth_historical_airquality = os.path.join("data", "nabel", "historical_data", fn_Pollutant)
+# First, find out which row starts the real data (the header)
+with open(pth_historical_airquality, encoding='latin-1') as f:
+    for i, line in enumerate(f):
+        if line.startswith("Datum/Zeit"):
+            data_start = i
+            break
+
+# Now, load only the table, skipping metadata rows
+df = pd.read_csv(pth_historical_airquality,
+    sep=';',
+    skiprows=data_start,
+    encoding='latin-1'
+)
+
+print(df.head())
+#%% md
+# Let us now remove all empty data lines.
+#%%
+df_clean = df.dropna(how='all', subset=df.columns[1:])
+#%%
+df_clean.head()
+#%%
+df['Datum/Zeit'] = pd.to_datetime(df['Datum/Zeit'], format='%d.%m.%Y', errors='coerce')
+
+# Now filter for year 2025
+df_2025 = df[df['Datum/Zeit'].dt.year == 2025]
+
+print(df_2025.head())
+#%% md
+# In the following, we are only interested in the data for 2025. Thus, we set df to df_2025. We would like to have the median per month and per year of the pollutant measurement values for every station.
+#%%
+# Add year and month columns for grouping
+df = df_2025
+df['Year'] = df['Datum/Zeit'].dt.year
+df['Month'] = df['Datum/Zeit'].dt.month
+
+# List of station columns (all except 'Datum/Zeit', 'Year', 'Month')
+station_cols = [col for col in df.columns if col not in ['Datum/Zeit', 'Year', 'Month']]
+
+# Group by year and month, then compute the median for each station
+median_per_month = df.groupby(['Year', 'Month'])[station_cols].median()
+
+# For median per year:
+median_per_year = df.groupby(['Year'])[station_cols].median()
+
+print("Median per month (per station):")
+print(median_per_month.head())
+
 
 #%%
+print("\nMedian per year (per station):")
+print(median_per_year.head())
+#%% md
+# 
