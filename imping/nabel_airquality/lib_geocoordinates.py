@@ -45,6 +45,24 @@ def get_wgs84_municipality(name):
     results = r.json().get('results', [])
     if results:
         geom = results[0]['attrs']
-        return float(geom['lat']), float(geom['lon'])
+        return float(geom['easting']), float(geom['northing'])
     else:
         return None
+
+def get_wgs84_municipality(name):
+    url = 'https://api3.geo.admin.ch/rest/services/api/SearchServer'
+    params = {
+        'searchText': name,
+        'type': 'locations',  # 'locations' is correct, not 'municipality'
+        'limit': 5  # Search a few results in case of similar names
+    }
+    r = requests.get(url, params=params)
+    r.raise_for_status()  # Raise if there is a 404 or other error
+    results = r.json().get('results', [])
+    for res in results:
+        if res['attrs'].get('featureId') is not None:
+            geom = res['attrs']
+            # WGS84 latitude and longitude
+            return float(geom['lat']), float(geom['lon'])
+    # If no municipality found
+    return None

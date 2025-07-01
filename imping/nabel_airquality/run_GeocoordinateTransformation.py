@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 import time
-from imping.nabel_airquality.lib_geocoordinates import parse_coords, swiss_lv95_to_wgs84
+from imping.nabel_airquality.lib_geocoordinates import parse_coords, swiss_lv95_to_wgs84, get_wgs84_municipality
 # Load the CSV
 df = pd.read_csv(os.path.join('data','nabel','stations.csv'))
 
@@ -28,3 +28,6 @@ df['WGS84_Longitude'] = lons
 # Save to new CSV
 df.to_csv(os.path.join('data','nabel','stations_with_wgs84.csv'), index=False)
 print('✅ Done! File written as with_wgs84.csv')
+
+lat, lon = get_wgs84_municipality('Steinhausen')
+print(f'Steinhausen coordinates: latitude={lat}, longitude={lon}')
