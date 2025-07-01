@@ -12,7 +12,8 @@ def get_air_quality(latitude, longitude, api_key):
   Returns:
     A JSON object containing air quality data, or None if an error occurs.
   """
-  url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat=50&lon=50&appid={api_key}"
+  url = f"https://api.openweathermap.org/data/2.5/air_pollution?lat={latitude}&lon={longitude}&appid={api_key}"
+
   try:
     response = requests.get(url)
     response.raise_for_status()  # Raise an exception for bad status codes
