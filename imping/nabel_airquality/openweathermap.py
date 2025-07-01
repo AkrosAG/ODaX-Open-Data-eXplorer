@@ -30,12 +30,17 @@ def get_air_quality(latitude, longitude, api_key):
     print(f"Error fetching data: {e}")
     return None
 
-# Replace with your actual latitude, longitude, and API key
+
+"""
+# Replace it with your actual latitude, longitude, and API key
 latitude = 47.3769
 longitude = 8.5417
+
+
 api_key = API_KEY
 
 air_quality_data = get_air_quality(latitude, longitude, api_key)
 
 if air_quality_data:
   print(json.dumps(air_quality_data, indent=2))
+"""

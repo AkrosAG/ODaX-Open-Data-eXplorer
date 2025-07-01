@@ -58,7 +58,7 @@ def GetRegion(Data: pd.DataFrame, Kanton: str) -> Optional[List[str]]:
     return regions.tolist()
 
 
-def GetMunicities(pth: str, Kanton: str, Region: str) -> Optional[List[str]]:
+def GetMunicipalities(pth: str, Kanton: str, Region: str) -> Optional[List[str]]:
     """
     Loads a municipality list from an Excel file and returns distinct municipalities (Gemeinden)
     for a given canton and region.
@@ -315,7 +315,7 @@ if __name__ == '__main__':
     if Data is not None:
         s_Region = GetRegion(Data, 'BE')
         pth_Municipy = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'praemienregionen-ab-2025.xlsx')
-        s_Municipy = GetMunicities(pth_Municipy, 'BE', s_Region[0])
+        s_Municipy = GetMunicipalities(pth_Municipy, 'BE', s_Region[0])
 
         Kanton, Region = GetKantonRegionFromGemeinde(pth_Municipy, s_Municipy[0])
         s_Altersklasse = ['AKL-KIN', 'AKL-JUG', 'AKL_ERW']
