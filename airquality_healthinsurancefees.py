@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os, json
 from imping.healthinsurance.lib_healthinsurance import LoadData, GetFeesByParameters, GetKVNameFromBAGNumber, GetAlterunterGruppenProVersicherer, GetRegion, GetKantonRegionFromGemeinde, GetMunicipalities_MultipleFeeRegions
 from imping.nabel_airquality.lib_openweathermap import get_air_quality
-from imping.nabel_airquality.lib_geocoordinates import get_wgs84_municipality
+from imping.nabel_airquality.lib_geocoordinates import get_wgs84_municipality, idw_interpolate
 #%% md
 # 
 #%%
@@ -97,6 +97,8 @@ s_Tariftyp = ['TAR-BASE', 'TAR-DIV', 'TAR-HMO', 'TAR-HAM']
 #%% md
 # When considering the health insurance for children, there are even different subgroups available depending on the number of siblings a child has. To receive this information for all insurance companies and a certain canton and fee region, the following command can be used:
 #%%
+Region = '1'
+Kanton = 'BE'
 vk_Altersuntergruppe = GetAlterunterGruppenProVersicherer(Data, Kanton = Kanton, Region = 'PR-REG CH'+Region, Altersklasse=s_Altersklasse[0], Unfalldeckung=s_Unfalldeckung[0], Franchise = vk_Franchise[s_Altersklasse[0]][0], Tariftyp = s_Tariftyp[0])
 if vk_Altersuntergruppe:
     print("Altersuntergruppen per Versicherer for your selection:")
@@ -155,61 +157,97 @@ if air_quality_data:
 # The NABEL also provides historical data which can be manually downloaded from the website. Unfortunately, the openweathermap API for the historical data is not free of charge. Thus, I decided to go with the manual download.
 # In the following, we will have a look at the PM2.5 data.
 #%%
+df_stations = pd.read_csv(os.path.join("data", "nabel","stations_with_wgs84.csv"), encoding="utf-8")
+
+
+station_name_map = {
+    "BASEL-BINNINGEN": "Basel-Binningen",
+    "BERN-BOLLWERK": "Bern-Bollwerk",
+    "BEROMÜNSTERk": "Beromünster",
+    "CHAUMONT": "Chaumont",
+    "DAVOS-SEEHORNWALD": "Davos-Seehornwald",
+    "DÜBENDORF-EMPA": "Dübendorf-Empa",
+    "HÄRKINGEN-A1": "Härkingen-A1",
+    "JUNGFRAUJOCH": "Jungfraujoch",
+    "LAUSANNE-CÉSAR-ROUX": "Lausanne-César-Roux",
+    "LUGANO-UNIVERSITA": "Lugano-Università",
+    "MAGADINO-CADENAZZO": "Magadino-Cadenazzo",
+    "PAYERNE": "Payerne",
+    "RIGI-SEEBODENALP": "Rigi-Seebodenalp",
+    "SION-AÉROPORT-A9": "Sion-Aéroport-A9",
+    "TÄNIKON": "Tänikon",
+    "ZÜRICH-KASERNE": "Zürich-Kaserne"
+}
+
+
+
 s_Pollutant = ["CO","CPC","EC","NMVOC","NO2","NOX","O3","PM2.5","PM10","PREC","RAD","SO2","TEMP"]
-fn_Pollutant = s_Pollutant[7]+".csv"
+s_Year = list(range(2000,2026,1))
+new_columns = { }
 
-pth_historical_airquality = os.path.join("data", "nabel", "historical_data", fn_Pollutant)
-# First, find out which row starts the real data (the header)
-with open(pth_historical_airquality, encoding='latin-1') as f:
-    for i, line in enumerate(f):
-        if line.startswith("Datum/Zeit"):
-            data_start = i
-            break
+for Pollutant in s_Pollutant:
+    fn_Pollutant = Pollutant+".csv"
 
-# Now, load only the table, skipping metadata rows
-df = pd.read_csv(pth_historical_airquality,
-    sep=';',
-    skiprows=data_start,
-    encoding='latin-1'
-)
+    pth_historical_airquality = os.path.join("data", "nabel", "historical_data", fn_Pollutant)
+    # First, find out which row starts the real data (the header)
+    with open(pth_historical_airquality, encoding='latin-1') as f:
+        for i, line in enumerate(f):
+            if line.startswith("Datum/Zeit"):
+                data_start = i
+                break
 
-print(df.head())
+    # Now, load only the table, skipping metadata rows
+    df = pd.read_csv(pth_historical_airquality,
+        sep=';',
+        skiprows=data_start,
+        encoding='latin-1'
+    )
+    # Let us now remove all empty data lines.
+    df_clean = df.dropna(how='all', subset=df.columns[1:])
+    #df = df_clean
+    df['Datum/Zeit'] = pd.to_datetime(df['Datum/Zeit'], format='%d.%m.%Y', errors='coerce')
+
+    for Year in s_Year:
+        df_Yearly = df[df['Datum/Zeit'].dt.year == Year].copy()
+        df_Yearly.loc[:, 'Year'] = df_Yearly['Datum/Zeit'].dt.year
+        df_Yearly.loc[:, 'Month'] = df_Yearly['Datum/Zeit'].dt.month
+
+        # List of station columns (all except 'Datum/Zeit', 'Year', 'Month')
+        station_cols = [col for col in df_Yearly.columns if col not in ['Datum/Zeit', 'Year', 'Month']]
+
+        # For median per year:
+        median_per_year = df_Yearly.groupby(['Year'])[station_cols].median()
+        col_name = f"{Pollutant}_{Year}"
+        # Prepare a list with the right value for each row (station) in df_stations
+        col_vals = []
+        for _, row in df_stations.iterrows():
+            st_name = row["Station"]
+            # Find CSV name for this station
+            csv_station = station_name_map[st_name]
+            if csv_station in median_per_year:
+                col_vals.append(median_per_year[csv_station].values[0])
+            else:
+                col_vals.append(None)
+        new_columns[col_name] = col_vals
+
+# 2. Add all new columns at once
+df_newcols = pd.DataFrame(new_columns)
+df_result = pd.concat([df_stations, df_newcols], axis=1)
+
+# 3. Save or use
+df_result.to_csv(os.path.join("data", "nabel", "stations_with_wgs84_with_pollution.csv"), index=False, encoding="utf-8")
+#%%
+Enriched_Pollution_Per_Station = pd.read_csv(os.path.join("data", "nabel", "stations_with_wgs84_with_pollution.csv"), encoding="utf-8")
+Enriched_Pollution_Per_Station.head()
 #%% md
-# Let us now remove all empty data lines.
+# Next, we will use the air pollution data at the stations to interpolate the yearly median air pollution values at a particular municipality based on the Inverse Distance Weighting (IDW) algorithm.
 #%%
-df_clean = df.dropna(how='all', subset=df.columns[1:])
-#%%
-df_clean.head()
-#%%
-df['Datum/Zeit'] = pd.to_datetime(df['Datum/Zeit'], format='%d.%m.%Y', errors='coerce')
+Year = 2025
+Pollutant = 'PM2.5'
+value_col = Pollutant+'_'+ str(Year)
+lat, lon = get_wgs84_municipality('Steinhausen')
 
-# Now filter for year 2025
-df_2025 = df[df['Datum/Zeit'].dt.year == 2025]
 
-print(df_2025.head())
+idw_interpolate(stations_df = Enriched_Pollution_Per_Station , target_lat=lat, target_lon=lon, value_col = value_col, k=4, power=2)
 #%% md
-# In the following, we are only interested in the data for 2025. Thus, we set df to df_2025. We would like to have the median per month and per year of the pollutant measurement values for every station.
-#%%
-# Add year and month columns for grouping
-df = df_2025
-df['Year'] = df['Datum/Zeit'].dt.year
-df['Month'] = df['Datum/Zeit'].dt.month
-
-# List of station columns (all except 'Datum/Zeit', 'Year', 'Month')
-station_cols = [col for col in df.columns if col not in ['Datum/Zeit', 'Year', 'Month']]
-
-# Group by year and month, then compute the median for each station
-median_per_month = df.groupby(['Year', 'Month'])[station_cols].median()
-
-# For median per year:
-median_per_year = df.groupby(['Year'])[station_cols].median()
-
-print("Median per month (per station):")
-print(median_per_month.head())
-
-
-#%%
-print("\nMedian per year (per station):")
-print(median_per_year.head())
-#%% md
-# 
+# Next, we go over all the cantons and all its municipalities and determine the air pollution concentrations per year. So, we then can create a heatmap per year and pollutant which expresses the relation between the pollutant concentration and the health insurance fee.
