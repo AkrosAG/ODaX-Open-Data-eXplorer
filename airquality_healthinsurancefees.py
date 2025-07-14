@@ -5,6 +5,8 @@ import os, json
 from imping.healthinsurance.lib_healthinsurance import LoadData, GetFeesByParameters, GetKVNameFromBAGNumber, GetAlterunterGruppenProVersicherer, GetRegion, GetKantonRegionFromGemeinde, GetMunicipalities_MultipleFeeRegions
 from imping.nabel_airquality.lib_openweathermap import get_air_quality
 from imping.nabel_airquality.lib_geocoordinates import get_wgs84_municipality, idw_interpolate
+import statistics
+import numpy as np
 #%% md
 # 
 #%%
@@ -251,3 +253,64 @@ lat, lon = get_wgs84_municipality('Steinhausen')
 idw_interpolate(stations_df = Enriched_Pollution_Per_Station , target_lat=lat, target_lon=lon, value_col = value_col, k=4, power=2)
 #%% md
 # Next, we go over all the cantons and all its municipalities and determine the air pollution concentrations per year. So, we then can create a heatmap per year and pollutant which expresses the relation between the pollutant concentration and the health insurance fee.
+#%%
+Year = 2025
+Pollutant = 'PM2.5'
+vk_Kanton_Pollutant = {}
+vk_Pollutant = {}
+value_col = Pollutant+'_'+ str(Year)
+pth_Fees = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'Prämien_CH.csv')
+Data = LoadData(pth_Fees)
+if Data is not None:
+    for Kanton in swiss_cantons_abbr_to_name.keys():
+        s_Region = GetRegion(Data, Kanton)
+        #if isinstance(s_Region, (list, set)):
+        #    s_Region = ', '.join(str(region) for region in s_Region)
+        pth_Municipality = os.path.join(os.getcwd(), 'data', 'healthinsurance', 'praemienregionen-ab-2025.xlsx')
+        if len(s_Region) > 1:
+            s_Municipality = GetMunicipalities_MultipleFeeRegions(pth_Municipality, Kanton, s_Region[0])
+            # Finding the canton and fee region based on the name of the municipality can be achieved by the following command:
+            Kanton, Region = GetKantonRegionFromGemeinde(pth_Municipality, s_Municipality[0])
+            print(f"For municipality {s_Municipality[0]}, the canton is {Kanton} and the fee region is {Region}.")
+        else:
+            s_Municipality = GetMunicipalities_PerCanton(swiss_cantons_abbr_to_name[Kanton])
+        print(f"In the fee region in Canton {Kanton}, the municipalities belong to: {s_Municipality}")
+        for Municipality in s_Municipality:
+            lat, lon = get_wgs84_municipality('Steinhausen')
+            Pollutant_Interpolated = idw_interpolate(stations_df = Enriched_Pollution_Per_Station , target_lat=lat, target_lon=lon, value_col = value_col, k=4, power=2)
+            vk_Pollutant[Municipality] = Pollutant_Interpolated
+        if vk_Pollutant:
+            vk_Kanton_Pollutant[Kanton] = statistics.median(vk_Pollutant.values())
+        else:
+            vk_Kanton_Pollutant[Kanton] = np.nan
+        vk_Pollutant = {}
+#%%
+vk_Kanton_Pollutant
+#%%
+# Example dataframes (replace with your real data)
+df_air = pd.DataFrame({
+    "Kanton": list(vk_Kanton_Pollutant.keys()),
+    "Airpollution": list(vk_Kanton_Pollutant.values())
+})
+df_fee = pd.DataFrame({
+    "Kanton": ["Aargau", "Bern", "Zürich"],
+    "HealthInsuranceFee": [350, 420, 390]
+})
+
+# Merge on "Kanton"
+df = pd.merge(df_air, df_fee, on="Kanton")
+
+#%%
+import plotly.express as px
+
+fig = px.imshow([df["Airpollution"]],
+                labels=dict(x="Kanton", color="Airpollution"),
+                x=df["Kanton"],
+                y=["Airpollution"],  # Dummy y-label
+                color_continuous_scale="YlOrRd")
+
+fig.update_layout(
+    title="Air Pollution by Kanton",
+    yaxis=dict(showticklabels=False)
+)
+fig.show()
