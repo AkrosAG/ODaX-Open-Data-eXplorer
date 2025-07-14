@@ -12,3 +12,7 @@
 6) Install ```poetry``` in the virtual environment via ```pip install poetry```.
 7) Install the dependencies via ```poetry install```.
 8) Run the python scripts from the root directory.
+
+
+In case, wsl is used, open the explorer and go to the directory
+```\\wsl$\Ubuntu\home\{USER}``` where you replace ```{USER}``` by your wsl username. Then ensure that in the .ssh folder the same keys and configuration are placed than in your Windows .ssh folder. You may need to copy the content so that you can use the Linux terminal commands to clone the repository.
