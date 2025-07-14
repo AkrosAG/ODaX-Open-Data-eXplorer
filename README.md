@@ -19,17 +19,17 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 2) Checkout the branch ```develop```.
 3) Delete the folder ```.vitualenvs``` in ```/home/{USER}``` if it exists.
 4) Navigate to the root directory of your project ```/home/{USER}/ODaX-Open-Data-eXplorer```.
-4) Create a virtual environment via python3.1X -m venv venv
-5) If step 4 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
-6) Using ```wsl```, activate the virtual environment by ```source venv/bin/activate```.
-7) Update pip via ```pip install --upgrade pip```
-8) Install ```poetry``` in the virtual environment via ```pip install poetry```.
-9) Install the dependencies via ```poetry install --no-root```.
-10) Go to the Pycharm ```Settings```, then the ```Project: ODaX-Open-Data-eXplorer```, and then the ```Project Interpreter```.
-11) Click on ```Add interpreter``` and select ```On WSL```.
-11) Add an ```existing``` python interpreter and select the python in the previously created venv ```/home/{USER}/ODaX-Open-Data-eXplorer/venv/bin/python3.X```.
-12) Run the python scripts from the root directory in the terminal or use the Pycharm ```Run```/```Debug``` functionality. Remember to set the ```Working directory``` in the ```Run/ Debug configuration``` to the project root directory.
-13) Side note: If you want to run a Python file as a Jupyter Notebook, you can right-click on the file and select ```Convert to Jupyter Notebook```.
+5) Create a virtual environment via python3.1X -m venv venv
+6) If step 4 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
+7) Using ```wsl```, activate the virtual environment by ```source venv/bin/activate```.
+8) Update pip via ```pip install --upgrade pip```
+9) Install ```poetry``` in the virtual environment via ```pip install poetry```.
+10) Install the dependencies via ```poetry install --no-root```.
+11) Go to the Pycharm ```Settings```, then the ```Project: ODaX-Open-Data-eXplorer```, and then the ```Project Interpreter```.
+12) Click on ```Add interpreter``` and select ```On WSL```.
+13) Add an ```existing``` python interpreter and select the python in the previously created venv ```/home/{USER}/ODaX-Open-Data-eXplorer/venv/bin/python3.X```.
+14) Run the python scripts from the root directory in the terminal or use the Pycharm ```Run```/```Debug``` functionality. Remember to set the ```Working directory``` in the ```Run/ Debug configuration``` to the project root directory.
+15) Side note: If you want to run a Python file as a Jupyter Notebook, you can right-click on the file and select ```Convert to Jupyter Notebook```.
 
 ## .env file
 Please make sure to get an API key from the website https://home.openweathermap.org/ for receiving the current air quality data via a REST API. Optionally, if you want to use the AirIQ air quality data, you can request an API key from  https://www.iqair.com/ . 
