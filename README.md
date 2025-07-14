@@ -16,3 +16,11 @@
 
 In case, wsl is used, open the explorer and go to the directory
 ```\\wsl$\Ubuntu\home\{USER}``` where you replace ```{USER}``` by your wsl username. Then ensure that in the .ssh folder the same keys and configuration are placed than in your Windows .ssh folder. You may need to copy the content so that you can use the Linux terminal commands to clone the repository.
+
+## .env file
+Please make sure to get an API key from the website https://home.openweathermap.org/ for receiving the current air quality data via a REST API. Optional, if you want to use the AirIQ air quality data, you can request an API key from  https://www.iqair.com/ . 
+Create an .env file in the project root and add the API keys as values of the following variables:
+```
+APIKeyOpenWeatherMap = ""
+APIKeyAirIQ = ''
+```
