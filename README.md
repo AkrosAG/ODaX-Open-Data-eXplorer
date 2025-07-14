@@ -29,9 +29,10 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 11) Click on ```Add interpreter``` and select ```On WSL```.
 11) Add an ```existing``` python interpreter and select the python in the previously created venv ```/home/{USER}/ODaX-Open-Data-eXplorer/venv/bin/python3.X```.
 12) Run the python scripts from the root directory in the terminal or use the Pycharm ```Run```/```Debug``` functionality. Remember to set the ```Working directory``` in the ```Run/ Debug configuration``` to the project root directory.
+13) Side note: If you want to run a Python file as a Jupyter Notebook, you can right-click on the file and select ```Convert to Jupyter Notebook```.
 
 ## .env file
-Please make sure to get an API key from the website https://home.openweathermap.org/ for receiving the current air quality data via a REST API. Optional, if you want to use the AirIQ air quality data, you can request an API key from  https://www.iqair.com/ . 
+Please make sure to get an API key from the website https://home.openweathermap.org/ for receiving the current air quality data via a REST API. Optionally, if you want to use the AirIQ air quality data, you can request an API key from  https://www.iqair.com/ . 
 Create an .env file in the project root and add the API keys as values of the following variables:
 ```
 APIKeyOpenWeatherMap = ""
