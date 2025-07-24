@@ -1,6 +1,8 @@
-# ODaX-Open-Data-eXplorer
+# ODaX-Open-Data-eXplorer (ODaX)
+ODaX is an open-source data analytics platform designed for the analysis of open data.
+It serves as a tool to demonstrate to clients the added value of data and how easily and efficiently valuable insights can be extracted from it.
 
-## Installation
+## Installation of the environment wsl on Windows
 ### wsl installation
 Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or use Ubuntu instead. Make sure that you do a restart after you installed ```wsl```.
 
@@ -14,7 +16,7 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 2) As you have previously installed wsl and restarted the computer, there should be an Ubuntu terminal based on wsl available in your Pycharm. If so, please open this terminal. If not, please check your wsl installation.
 3) You can check with ```pwd``` if the selected directory in your Ubuntu terminal session is ```/home/{USER}```. If not, navigate there and perform the following steps.
 
-## Installation
+## Installation of ODaX
 1) Clone the repository https://github.com/AkrosAG/ODaX-Open-Data-eXplorer via git in the wsl filesystem, e.g., under ```/home/{USER}```.
 2) Checkout the branch ```develop```.
 3) Delete the folder ```.vitualenvs``` in ```/home/{USER}``` if it exists.
@@ -40,4 +42,57 @@ APIKeyAirIQ = ''
 ```
 
 
+# Architecture
+
+ODaX follows a modular architecture designed for flexibility and extensibility in data analysis workflows. The architecture consists of the following key components:
+
+1. **Data Import Layer**: Specialized modules in the `imping` package handle importing data from various sources, including CSV files, Excel files, and external APIs. Each data source has its own dedicated module with specific functions for data retrieval and initial processing.
+
+2. **Data Processing Layer**: Once imported, data is processed using pandas DataFrames for manipulation, transformation, and analysis. This layer includes functions for coordinate transformations, data interpolation, and statistical calculations.
+
+3. **Analysis Layer**: This layer combines data from different sources to extract insights. It includes functions for correlating data (e.g., air quality with health insurance fees) and performing statistical analyses.
+
+4. **Visualization Layer**: The project uses Plotly and Dash for creating interactive visualizations and dashboards to present the analysis results.
+
+5. **Notebook Interface**: Jupyter notebooks provide an interactive environment for data exploration and analysis, allowing users to combine code, visualizations, and documentation.
+
+The architecture is designed to be modular, allowing new data sources to be added easily by creating new modules in the `imping` package.
+
+# Modules
+
+ODaX is organized into the following main modules:
+
+## Data Modules
+
+### `data/`
+Contains raw and processed data files used by the application:
+- `healthinsurance/`: Health insurance data from the Swiss Federal Office of Public Health (BAG)
+- `nabel/`: Air quality data from the National Air Pollution Monitoring Network (NABEL)
+
+## Import Processing Modules (`imping/`)
+
+### `imping/healthinsurance/`
+Modules for importing and processing health insurance data:
+- `lib_healthinsurance.py`: Functions for loading health insurance data, retrieving fee information, and mapping municipalities to fee regions
+
+### `imping/meteoswiss/`
+Modules for importing and processing meteorological data from MeteoSwiss:
+- `getStations.py`: Functions for retrieving station information from MeteoSwiss
+
+### `imping/nabel_airquality/`
+Modules for importing and processing air quality data:
+- `lib_openweathermap.py`: Functions for retrieving current air quality data from the OpenWeatherMap API
+- `lib_geocoordinates.py`: Functions for coordinate transformations (Swiss LV95 to WGS84) and spatial interpolation of air quality data
+
+## Analysis Scripts
+
+### Root-level Python Scripts
+- `run_openweathermap.py`: Script for fetching air quality data from OpenWeatherMap API
+- `run_GeocoordinateTransformation.py`: Script for transforming Swiss coordinates to WGS84
+- `airquality_healthinsurancefees.py`: Comprehensive analysis script that combines air quality and health insurance data
+
+## Notebook Interfaces
+
+### Jupyter Notebooks
+- `airquality_healthinsurancefees.ipynb`: Interactive notebook version of the analysis script for exploring the relationship between air quality and health insurance fees
 
