@@ -8,20 +8,23 @@ The script skips files that have already been downloaded to avoid redundant down
 
 import requests
 import os
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Union
 
-STAC_URL: str = "https://data.geo.admin.ch/api/stac/v1/collections/ch.meteoschweiz.ogd-smn/items"
+STAC_URL: str = (
+    "https://data.geo.admin.ch/api/stac/v1/collections/ch.meteoschweiz.ogd-smn/items"
+)
 OUTDIR: str = "meteoswiss_smn_data"
 os.makedirs(OUTDIR, exist_ok=True)
+
 
 def download_file(url: str, path: str) -> None:
     """
     Download a file from a URL and save it to the specified path.
-    
+
     Parameters:
         url (str): The URL of the file to download
         path (str): The local path where the file will be saved
-        
+
     Returns:
         None
     """
@@ -30,6 +33,7 @@ def download_file(url: str, path: str) -> None:
     with open(path, "wb") as f:
         for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
+
 
 print("📥 Fetching station list...")
 resp: requests.Response = requests.get(STAC_URL, params={"limit": 200})

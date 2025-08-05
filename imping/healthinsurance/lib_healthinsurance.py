@@ -38,7 +38,7 @@ def LoadData(pth: str) -> Optional[pd.DataFrame]:
         - Any other unexpected exception.
     """
     try:
-        Data = pd.read_csv(pth, sep=';', encoding='latin1')
+        Data = pd.read_csv(pth, sep=";", encoding="latin1")
         print("✅ File loaded successfully.")
         return Data
     except FileNotFoundError:
@@ -64,18 +64,20 @@ def GetRegion(Data: pd.DataFrame, Kanton: str) -> Optional[List[str]]:
     Returns:
         Optional[List[str]]: A list of distinct region names if found, otherwise None.
     """
-    if 'Kanton' not in Data.columns or 'Region' not in Data.columns:
+    if "Kanton" not in Data.columns or "Region" not in Data.columns:
         print("❌ Columns 'Kanton' or 'Region' not found in DataFrame.")
         return None
 
-    regions = Data[Data['Kanton'] == Kanton]['Region'].dropna().unique()
+    regions = Data[Data["Kanton"] == Kanton]["Region"].dropna().unique()
 
     if len(regions) == 0:
         return None
     return regions.tolist()
 
 
-def GetMunicipalities_MultipleFeeRegions(pth: str, Kanton: str, Region: str) -> Optional[List[str]]:
+def GetMunicipalities_MultipleFeeRegions(
+    pth: str, Kanton: str, Region: str
+) -> Optional[List[str]]:
     """
     Loads a municipality list from an Excel file and returns distinct municipalities (Gemeinden)
     for a given canton and region.
@@ -94,14 +96,17 @@ def GetMunicipalities_MultipleFeeRegions(pth: str, Kanton: str, Region: str) -> 
         - The relevant columns must include 'Kanton', 'Region', and 'Gemeinde'.
     """
     try:
-        sheet = 'Anhang EDI Ver. über die PR'
+        sheet = "Anhang EDI Ver. über die PR"
         Data = pd.read_excel(pth, sheet_name=sheet)
         print("✅ File loaded successfully.")
 
-        filtered = Data[
-            (Data['Kanton'] == Kanton) &
-            (Data['Region'] == int(Region[-1]))
-            ]['Gemeinde'].dropna().unique()
+        filtered = (
+            Data[(Data["Kanton"] == Kanton) & (Data["Region"] == int(Region[-1]))][
+                "Gemeinde"
+            ]
+            .dropna()
+            .unique()
+        )
 
         return filtered.tolist()
 
@@ -116,19 +121,20 @@ def GetMunicipalities_MultipleFeeRegions(pth: str, Kanton: str, Region: str) -> 
 
     return None
 
+
 def GetMunicipalities_PerCanton(Canton: str) -> List[str]:
     """
     Retrieves a list of municipalities for a given canton from the Swiss Federal Statistical Office API.
-    
+
     This function fetches current municipality data using the BFS API, filtering for the specified canton.
     It uses the current date to ensure the most up-to-date municipality information.
-    
+
     Parameters:
         Canton (str): The canton abbreviation to filter by (e.g., 'ZH', 'BE').
-        
+
     Returns:
         List[str]: A list of municipality names belonging to the specified canton.
-        
+
     Notes:
         - The function uses the agvchapp.bfs.admin.ch API which provides official Swiss municipality data.
         - The API response is expected to be in CSV format with at least 'Name' and 'Canton' columns.
@@ -140,10 +146,7 @@ def GetMunicipalities_PerCanton(Canton: str) -> List[str]:
     # Construct the URL
     url = f"https://www.agvchapp.bfs.admin.ch/api/communes/levels?date={today}"
 
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0"
-    }
+    headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
 
     response = requests.get(url, headers=headers)
     try:
@@ -162,7 +165,6 @@ def GetMunicipalities_PerCanton(Canton: str) -> List[str]:
     return df[df["Canton"] == Canton]["Name"].values.tolist()
 
 
-
 def GetKantonRegionFromGemeinde(pth: str, Gemeinde: str) -> Optional[Tuple[str, str]]:
     """
     Looks up the canton and region for a given municipality (Gemeinde).
@@ -179,20 +181,22 @@ def GetKantonRegionFromGemeinde(pth: str, Gemeinde: str) -> Optional[Tuple[str, 
         - The relevant columns must include 'Gemeinde', 'Kanton', and 'Region'.
     """
     try:
-        sheet = 'Anhang EDI Ver. über die PR'
+        sheet = "Anhang EDI Ver. über die PR"
         Data = pd.read_excel(pth, sheet_name=sheet)
         print("✅ File loaded successfully.")
 
         # Filter for matching Gemeinde (case-insensitive and stripping whitespace)
-        match = Data[Data['Gemeinde'].str.strip().str.lower() == Gemeinde.strip().lower()]
+        match = Data[
+            Data["Gemeinde"].str.strip().str.lower() == Gemeinde.strip().lower()
+        ]
 
         if match.empty:
             print(f"⚠️ Gemeinde '{Gemeinde}' not found.")
             return None
 
         # Take first match in case of duplicates
-        kanton = match.iloc[0]['Kanton']
-        region = str(match.iloc[0]['Region'])
+        kanton = match.iloc[0]["Kanton"]
+        region = str(match.iloc[0]["Region"])
         return kanton, region
 
     except FileNotFoundError:
@@ -211,7 +215,7 @@ def GetFeesByParameters(
     Unfalldeckung,
     Franchise,
     Tariftyp,
-    Altersgruppe=''
+    Altersgruppe="",
 ) -> pd.DataFrame:
     """
     Filters health insurance data for a specific region and criteria.
@@ -231,8 +235,13 @@ def GetFeesByParameters(
     """
     # Ensure all required columns exist
     required_columns = [
-        'Kanton', 'Region', 'Unfalleinschluss', 'Altersklasse',
-        'Franchise', 'Tariftyp', 'Altersuntergruppe'
+        "Kanton",
+        "Region",
+        "Unfalleinschluss",
+        "Altersklasse",
+        "Franchise",
+        "Tariftyp",
+        "Altersuntergruppe",
     ]
     missing = [col for col in required_columns if col not in Data.columns]
     if missing:
@@ -240,31 +249,24 @@ def GetFeesByParameters(
 
     # Filter step by step for clarity and debugging
     filtered = Data[
-        (Data['Kanton'] == Kanton) &
-        (Data['Region'] == Region) &
-        (Data['Unfalleinschluss'] == Unfalldeckung) &
-        (Data['Altersklasse'] == Altersklasse) &
-        (Data['Franchise'] == Franchise) &
-        (Data['Tariftyp'] == Tariftyp)
+        (Data["Kanton"] == Kanton)
+        & (Data["Region"] == Region)
+        & (Data["Unfalleinschluss"] == Unfalldeckung)
+        & (Data["Altersklasse"] == Altersklasse)
+        & (Data["Franchise"] == Franchise)
+        & (Data["Tariftyp"] == Tariftyp)
     ]
 
     # Apply Altersuntergruppe filter only for children, if specified
-    if Altersklasse == 'AKL-KIN' and Altersgruppe != '':
-        filtered = filtered[filtered['Altersuntergruppe'] == Altersgruppe]
+    if Altersklasse == "AKL-KIN" and Altersgruppe != "":
+        filtered = filtered[filtered["Altersuntergruppe"] == Altersgruppe]
 
     # Optionally: reset index for neatness
     return filtered.reset_index(drop=True)
 
 
-
 def GetAlterunterGruppenProVersicherer(
-    Data: pd.DataFrame,
-    Kanton,
-    Region,
-    Altersklasse,
-    Unfalldeckung,
-    Franchise,
-    Tariftyp
+    Data: pd.DataFrame, Kanton, Region, Altersklasse, Unfalldeckung, Franchise, Tariftyp
 ) -> dict:
     """
     Returns a dictionary mapping each insurer (BAG-Nummer) to a sorted list of Altersuntergruppen,
@@ -283,25 +285,31 @@ def GetAlterunterGruppenProVersicherer(
         dict: {Versicherer: [sorted Altersuntergruppe, ...], ...}
     """
     required_columns = [
-        'Kanton', 'Region', 'Unfalleinschluss', 'Franchise', 'Tariftyp',
-        'Altersklasse', 'Versicherer', 'Altersuntergruppe'
+        "Kanton",
+        "Region",
+        "Unfalleinschluss",
+        "Franchise",
+        "Tariftyp",
+        "Altersklasse",
+        "Versicherer",
+        "Altersuntergruppe",
     ]
     missing = [col for col in required_columns if col not in Data.columns]
     if missing:
         raise ValueError(f"Missing columns in DataFrame: {missing}")
 
     filtered = Data[
-        (Data['Kanton'] == Kanton) &
-        (Data['Region'] == Region) &
-        (Data['Unfalleinschluss'] == Unfalldeckung) &
-        (Data['Franchise'] == Franchise) &
-        (Data['Tariftyp'] == Tariftyp) &
-        (Data['Altersklasse'] == Altersklasse)
+        (Data["Kanton"] == Kanton)
+        & (Data["Region"] == Region)
+        & (Data["Unfalleinschluss"] == Unfalldeckung)
+        & (Data["Franchise"] == Franchise)
+        & (Data["Tariftyp"] == Tariftyp)
+        & (Data["Altersklasse"] == Altersklasse)
     ]
 
     # Group by Versicherer and collect unique, sorted Altersuntergruppe values
     result = (
-        filtered.groupby('Versicherer')['Altersuntergruppe']
+        filtered.groupby("Versicherer")["Altersuntergruppe"]
         .apply(lambda x: sorted(set(x)))
         .to_dict()
     )
@@ -320,13 +328,13 @@ def GetKVNameFromBAGNumber(BAGNumber: int, pth: str) -> str:
     Returns:
         str: The name of the insurer, or None if not found.
     """
-    sheet_names = ['Zugelassene Krankenversicherer', 'zugelassene krankenversicherer']
+    sheet_names = ["Zugelassene Krankenversicherer", "zugelassene krankenversicherer"]
     for Sheet in sheet_names:
         try:
             Data = pd.read_excel(pth, sheet_name=Sheet)
             print(f"✅ File loaded successfully (Sheet: {Sheet}).")
-            if 'Nummer' in Data.columns and 'Name' in Data.columns:
-                result = Data.loc[Data['Nummer'] == BAGNumber, 'Name']
+            if "Nummer" in Data.columns and "Name" in Data.columns:
+                result = Data.loc[Data["Nummer"] == BAGNumber, "Name"]
                 if not result.empty:
                     return result.iloc[0].strip()
                 else:
@@ -339,5 +347,5 @@ def GetKVNameFromBAGNumber(BAGNumber: int, pth: str) -> str:
         except Exception as e:
             print(f"❌ Error loading file/sheet: {e}")
             return None
-    print(f"❌ None of the possible sheets found in the file.")
+    print("❌ None of the possible sheets found in the file.")
     return None
