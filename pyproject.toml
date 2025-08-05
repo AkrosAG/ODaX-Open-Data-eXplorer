@@ -1,6 +1,6 @@
 [project]
 name = "odax-open-data-explorer"
-package-mode = true
+package-mode = false
 version = "0.1.0"
 description = "Open data explorer."
 authors = [
