@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
-import os, json
+import os
+import json
 from imping.nabel_airquality.lib_openweathermap import get_air_quality
 
 load_dotenv()
@@ -15,4 +16,4 @@ api_key = API_KEY
 air_quality_data = get_air_quality(latitude, longitude, api_key)
 
 if air_quality_data:
-  print(json.dumps(air_quality_data, indent=2))
+    print(json.dumps(air_quality_data, indent=2))
