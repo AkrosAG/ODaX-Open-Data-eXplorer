@@ -31,8 +31,7 @@ jobs:
       # 4. Lint check (PEP8 via flake8)
       - name: Run PEP8 check
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+          flake8 .
 
       # 5. Run tests if folder exists
       - name: Run unit tests
