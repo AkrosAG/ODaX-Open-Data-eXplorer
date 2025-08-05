@@ -39,7 +39,7 @@ jobs:
         run: |
           pip install pytest
           if [ -d tests ]; then
-            pytest tests --maxfail=5 --disable-warnings -q
+            poetry run pytest tests --maxfail=5 --disable-warnings -q
           else
             echo "No tests/ folder found, skipping unit tests."
           fi
