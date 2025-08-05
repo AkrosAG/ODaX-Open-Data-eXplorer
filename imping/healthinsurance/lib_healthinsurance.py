@@ -1,3 +1,18 @@
+"""
+Swiss Health Insurance Data Processing Library
+
+This module provides functions for working with Swiss health insurance data,
+including loading data files, filtering by region, retrieving municipality information,
+and calculating insurance fees based on various parameters.
+
+The module supports operations like:
+- Loading and parsing health insurance data files
+- Finding regions within cantons
+- Mapping municipalities to cantons and regions
+- Filtering insurance fees by various criteria (age group, accident coverage, etc.)
+- Retrieving insurer information
+"""
+
 from typing import Optional, List, Tuple
 import pandas as pd
 import requests
@@ -101,7 +116,24 @@ def GetMunicipalities_MultipleFeeRegions(pth: str, Kanton: str, Region: str) -> 
 
     return None
 
-def GetMunicipalities_PerCanton(Canton: str) -> pd.DataFrame:
+def GetMunicipalities_PerCanton(Canton: str) -> List[str]:
+    """
+    Retrieves a list of municipalities for a given canton from the Swiss Federal Statistical Office API.
+    
+    This function fetches current municipality data using the BFS API, filtering for the specified canton.
+    It uses the current date to ensure the most up-to-date municipality information.
+    
+    Parameters:
+        Canton (str): The canton abbreviation to filter by (e.g., 'ZH', 'BE').
+        
+    Returns:
+        List[str]: A list of municipality names belonging to the specified canton.
+        
+    Notes:
+        - The function uses the agvchapp.bfs.admin.ch API which provides official Swiss municipality data.
+        - The API response is expected to be in CSV format with at least 'Name' and 'Canton' columns.
+        - If the API returns JSON instead of CSV, the function attempts to handle both formats.
+    """
     # Get today's date in DD-MM-YYYY format
     today = datetime.datetime.today().strftime("%d-%m-%Y")
 
