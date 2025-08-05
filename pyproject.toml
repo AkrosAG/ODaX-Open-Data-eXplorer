@@ -1,10 +1,10 @@
 [project]
 name = "odax-open-data-explorer"
-package-mode = false
+package-mode = true
 version = "0.1.0"
 description = "Open data explorer."
 authors = [
-    {name = "Stephanie Mehltretter"},
+    {name = "Stephanie Mehltretter"}, {name = "Kristina John"},
     {name = "Justin MacPherson"}
 ]
 readme = "README.md"
@@ -18,7 +18,8 @@ dependencies = [
     "dash (>=3.1.1,<4.0.0)",
     "jupyterlab (>=4.4.4,<5.0.0)",
     "openpyxl (>=3.1.5,<4.0.0)",
-    "apache-superset (>=5.0.0,<6.0.0)"
+    "apache-superset (>=5.0.0,<6.0.0)",
+    "pytest (>=8.4.1,<9.0.0)"
 ]
 
 
