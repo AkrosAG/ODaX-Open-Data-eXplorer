@@ -20,6 +20,7 @@ from io import StringIO
 import datetime
 from loguru import logger
 
+
 def LoadData(pth: str) -> Optional[pd.DataFrame]:
     """
     Loads a CSV file with semicolon separator and Latin-1 encoding.
@@ -342,4 +343,3 @@ def GetKVNameFromBAGNumber(BAGNumber: int, pth: str) -> str:
             return None
     logger.error("❌ None of the possible sheets found in the file.")
     return None
-
