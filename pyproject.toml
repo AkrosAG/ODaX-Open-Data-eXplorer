@@ -23,6 +23,7 @@ openpyxl = ">=3.1.5,<4.0.0"
 apache-superset = ">=5.0.0,<6.0.0"
 pytest = ">=8.4.1,<9.0.0"
 flake8 = ">=7.3.0,<8.0.0"
+loguru = "^0.7.3"
 
 
 [build-system]

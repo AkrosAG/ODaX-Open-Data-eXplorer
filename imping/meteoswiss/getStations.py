@@ -9,6 +9,7 @@ The script skips files that have already been downloaded to avoid redundant down
 import requests
 import os
 from typing import Dict, List, Any, Union
+from loguru import logger
 
 STAC_URL: str = (
     "https://data.geo.admin.ch/api/stac/v1/collections/ch.meteoschweiz.ogd-smn/items"
@@ -35,12 +36,12 @@ def download_file(url: str, path: str) -> None:
             f.write(chunk)
 
 
-print("📥 Fetching station list...")
+logger.info("📥 Fetching station list...")
 resp: requests.Response = requests.get(STAC_URL, params={"limit": 200})
 resp.raise_for_status()
 features: List[Dict[str, Any]] = resp.json().get("features", [])
 
-print(f"Found {len(features)} stations. Starting download…")
+logger.info(f"Found {len(features)} stations. Starting download…")
 for feat in features:
     props: Dict[str, Any] = feat["properties"]
     station: Union[str, int] = props.get("ogc_fid") or feat["id"]
@@ -52,8 +53,9 @@ for feat in features:
         fname: str = f"{station_id}_{asset_name}.csv"
         outpath: str = os.path.join(OUTDIR, fname)
         if os.path.exists(outpath):
-            continue  # skip already downloaded files
-        print(f" → Downloading {asset_name} for {station_id} …")
+            logger.debug(f"Skipping {fname} (already exists).")
+            continue
+        logger.info(f"→ Downloading {asset_name} for station {station_id} …")
         download_file(url, outpath)
 
-print("✅ Download complete!")
+logger.success("✅ Download complete!")
