@@ -34,35 +34,34 @@ def swiss_lv95_to_wgs84(
 
 
 def parse_coords(
-    easting_raw: Union[str, float, int],
+    easting_raw: Union[str, float, int, None],
     northing_raw: Union[str, float, int, None] = None,
 ) -> Tuple[Optional[float], Optional[float]]:
     """
-    Parse coordinate values that may be in different formats.
-
-    Handles coordinates in the following formats:
-    1. Two separate numeric values (already split)
-    2. A single string with format "easting/northing"
-
-    Parameters:
-        easting_raw (Union[str, float, int]): The easting coordinate or a string containing both coordinates
-        northing_raw (Union[str, float, int, None], optional): The northing coordinate if separate from easting
-
-    Returns:
-        Tuple[Optional[float], Optional[float]]: A tuple containing (easting, northing) as floats,
-        or (None, None) if parsing fails
+    Accept either:
+      1) a single string "easting/northing", or
+      2) two separate numeric values (both must be present).
+    Returns (None, None) if parsing fails or if one value is missing.
     """
-    # Case: both are numeric (already split)
+    # Case A: Single string "easting/northing"
+    if isinstance(easting_raw, str) and "/" in easting_raw:
+        east_str, north_str = easting_raw.split("/", 1)
+        try:
+            return float(east_str.strip()), float(north_str.strip())
+        except (ValueError, TypeError):
+            return None, None
+
+    # Case B: Both separate values must be present
+    if easting_raw is None and northing_raw is None:
+        return None, None
+    if (easting_raw is None) ^ (northing_raw is None):
+        # exactly one missing → treat as invalid pair
+        return None, None
+
+    # Case C: Both provided → try to parse
     try:
-        return float(easting_raw), float(northing_raw)
-    except ValueError:
-        # Try splitting if easting_raw contains '/'
-        if isinstance(easting_raw, str) and "/" in easting_raw:
-            east, north = easting_raw.split("/")
-            try:
-                return float(east), float(north)
-            except Exception:
-                return None, None
+        return float(easting_raw), float(northing_raw)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
         return None, None
 
 
