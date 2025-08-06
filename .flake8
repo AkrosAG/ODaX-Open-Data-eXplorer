@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 500
+max-complexity = 10
+extend-ignore = E402
+statistics = True
+count = True

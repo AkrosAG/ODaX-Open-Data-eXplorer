@@ -1,27 +1,31 @@
-[project]
+[tool.poetry]
 name = "odax-open-data-explorer"
-package-mode = false
 version = "0.1.0"
 description = "Open data explorer."
 authors = [
-    {name = "Stephanie Mehltretter"},
-    {name = "Justin MacPherson"}
+    "Stephanie Mehltretter",
+    "Kristina John",
+    "Justin MacPherson"
 ]
 readme = "README.md"
-requires-python = ">=3.10, <4.0"
-dependencies = [
-    "python-dotenv (>=1.1.0,<2.0.0)",
-    "requests (>=2.32.4,<3.0.0)",
-    "pandas (>=2.0.3,<3.0.0)",
-    "statistics (>=1.0.3.5,<2.0.0.0)",
-    "plotly (>=6.2.0,<7.0.0)",
-    "dash (>=3.1.1,<4.0.0)",
-    "jupyterlab (>=4.4.4,<5.0.0)",
-    "openpyxl (>=3.1.5,<4.0.0)",
-    "apache-superset (>=5.0.0,<6.0.0)"
-]
+packages = [{include = "imping"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+python-dotenv = ">=1.1.0,<2.0.0"
+requests = ">=2.32.4,<3.0.0"
+pandas = ">=2.0.3,<3.0.0"
+statistics = ">=1.0.3.5,<2.0.0.0"
+plotly = ">=6.2.0,<7.0.0"
+dash = ">=3.1.1,<4.0.0"
+jupyterlab = ">=4.4.4,<5.0.0"
+openpyxl = ">=3.1.5,<4.0.0"
+apache-superset = ">=5.0.0,<6.0.0"
+pytest = ">=8.4.1,<9.0.0"
+flake8 = ">=7.3.0,<8.0.0"
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+

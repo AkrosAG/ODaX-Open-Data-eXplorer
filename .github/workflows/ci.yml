@@ -2,43 +2,37 @@ name: CI - Python Lint & Tests
 
 on:
   push:
-    branches: ["**"]          # run on any branch
+    branches: ["**"]
   pull_request:
-    branches: ["main"]        # run for PRs into main
+    branches: ["main"]
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout code
       - uses: actions/checkout@v4
 
-      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"  # or match your project
+          python-version: "3.11"
 
-      # 3. Install dependencies
-      - name: Install dependencies
+      - name: Install Poetry & dependencies
         run: |
           python -m pip install --upgrade pip
           pip install poetry
-          poetry install --no-root
-          pip install flake8 pytest
+          poetry install --no-interaction --no-ansi --no-root
+          # If you move pytest/flake8 to [tool.poetry.group.dev.dependencies]
+          # use: poetry install --no-interaction --no-ansi --no-root --with dev
 
-      # 4. Lint check (PEP8 via flake8)
       - name: Run PEP8 check
-        run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+        run: poetry run flake8 .
 
-      # 5. Run tests if folder exists
       - name: Run unit tests
         run: |
           if [ -d tests ]; then
-            pytest tests --maxfail=5 --disable-warnings -q
+            poetry run pytest tests --maxfail=5 --disable-warnings -q
           else
             echo "No tests/ folder found, skipping unit tests."
           fi
