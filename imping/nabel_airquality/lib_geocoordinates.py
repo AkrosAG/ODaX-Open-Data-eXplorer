@@ -2,6 +2,7 @@ import requests
 import numpy as np
 from typing import Tuple, Optional, Union
 import pandas as pd
+from loguru import logger
 
 
 def swiss_lv95_to_wgs84(
@@ -29,7 +30,9 @@ def swiss_lv95_to_wgs84(
         data = resp.json()
         return data["easting"], data["northing"]
     except Exception as e:
-        print(f"Conversion failed for {easting}, {northing}: {e}")
+        # Keep docstring; switch print -> loguru
+        logger.error(f"Conversion failed for {easting}, {northing}: {e}")
+        # If you want stack traces, use: logger.exception(...)
         return None, None
 
 
@@ -86,7 +89,7 @@ def get_wgs84_municipality(name: str) -> Optional[Tuple[float, float]]:
         "limit": 5,  # Search a few results in case of similar names
     }
     try:
-        r = requests.get(url, params=params)
+        r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()  # Raise if there is a 404 or other error
         results = r.json().get("results", [])
         for res in results:
@@ -97,7 +100,9 @@ def get_wgs84_municipality(name: str) -> Optional[Tuple[float, float]]:
         # If no municipality found
         return None
     except Exception as e:
-        print(f"Municipality lookup failed for {name}: {e}")
+        # Keep docstring; switch print -> loguru
+        logger.error(f"Municipality lookup failed for {name}: {e}")
+        # If you want stack traces, use: logger.exception(...)
         return None
 
 
@@ -162,4 +167,4 @@ def idw_interpolate(
     weights /= weights.sum()
 
     interpolated_value = np.sum(weights * valid_values)
-    return interpolated_value
+    return float(interpolated_value)

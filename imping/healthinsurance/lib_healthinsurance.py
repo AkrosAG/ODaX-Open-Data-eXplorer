@@ -18,6 +18,7 @@ import pandas as pd
 import requests
 from io import StringIO
 import datetime
+from loguru import logger
 
 
 def LoadData(pth: str) -> Optional[pd.DataFrame]:
@@ -39,16 +40,16 @@ def LoadData(pth: str) -> Optional[pd.DataFrame]:
     """
     try:
         Data = pd.read_csv(pth, sep=";", encoding="latin1")
-        print("✅ File loaded successfully.")
+        logger.success("✅ File loaded successfully.")
         return Data
     except FileNotFoundError:
-        print(f"❌ File not found: {pth}")
+        logger.error(f"❌ File not found: {pth}")
     except UnicodeDecodeError as e:
-        print(f"❌ Encoding error while reading the file: {e}")
+        logger.error(f"❌ Encoding error while reading the file: {e}")
     except pd.errors.ParserError as e:
-        print(f"❌ Error while parsing the CSV file: {e}")
+        logger.error(f"❌ Error while parsing the CSV file: {e}")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        logger.exception(f"❌ Unexpected error: {e}")
 
     return None
 
@@ -65,7 +66,7 @@ def GetRegion(Data: pd.DataFrame, Kanton: str) -> Optional[List[str]]:
         Optional[List[str]]: A list of distinct region names if found, otherwise None.
     """
     if "Kanton" not in Data.columns or "Region" not in Data.columns:
-        print("❌ Columns 'Kanton' or 'Region' not found in DataFrame.")
+        logger.error("❌ Columns 'Kanton' or 'Region' not found in DataFrame.")
         return None
 
     regions = Data[Data["Kanton"] == Kanton]["Region"].dropna().unique()
@@ -98,7 +99,7 @@ def GetMunicipalities_MultipleFeeRegions(
     try:
         sheet = "Anhang EDI Ver. über die PR"
         Data = pd.read_excel(pth, sheet_name=sheet)
-        print("✅ File loaded successfully.")
+        logger.success("✅ File loaded successfully.")
 
         filtered = (
             Data[(Data["Kanton"] == Kanton) & (Data["Region"] == int(Region[-1]))][
@@ -111,13 +112,13 @@ def GetMunicipalities_MultipleFeeRegions(
         return filtered.tolist()
 
     except FileNotFoundError:
-        print(f"❌ File not found: {pth}")
+        logger.error(f"❌ File not found: {pth}")
     except UnicodeDecodeError as e:
-        print(f"❌ Encoding error while reading the file: {e}")
+        logger.error(f"❌ Encoding error while reading the file: {e}")
     except pd.errors.ParserError as e:
-        print(f"❌ Error while parsing the file: {e}")
+        logger.error(f"❌ Error while parsing the file: {e}")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        logger.exception(f"❌ Unexpected error: {e}")
 
     return None
 
@@ -142,24 +143,19 @@ def GetMunicipalities_PerCanton(Canton: str) -> List[str]:
     """
     # Get today's date in DD-MM-YYYY format
     today = datetime.datetime.today().strftime("%d-%m-%Y")
-
-    # Construct the URL
     url = f"https://www.agvchapp.bfs.admin.ch/api/communes/levels?date={today}"
 
     headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
 
     response = requests.get(url, headers=headers)
     try:
-        # Try utf-8 first
         data = response.json()
     except Exception:
-        # Try latin-1
         try:
             data = response.content.decode("latin-1")
         except Exception as e:
-            print("latin-1 decode also failed.")
+            logger.error("latin-1 decode also failed.")
             raise e
-        # Try parsing as JSON after latin-1 decode (if content is actually JSON)
 
     df = pd.read_csv(StringIO(data))
     return df[df["Canton"] == Canton]["Name"].values.tolist()
@@ -183,26 +179,24 @@ def GetKantonRegionFromGemeinde(pth: str, Gemeinde: str) -> Optional[Tuple[str, 
     try:
         sheet = "Anhang EDI Ver. über die PR"
         Data = pd.read_excel(pth, sheet_name=sheet)
-        print("✅ File loaded successfully.")
+        logger.success("✅ File loaded successfully.")
 
-        # Filter for matching Gemeinde (case-insensitive and stripping whitespace)
         match = Data[
             Data["Gemeinde"].str.strip().str.lower() == Gemeinde.strip().lower()
-        ]
+            ]
 
         if match.empty:
-            print(f"⚠️ Gemeinde '{Gemeinde}' not found.")
+            logger.warning(f"⚠️ Gemeinde '{Gemeinde}' not found.")
             return None
 
-        # Take first match in case of duplicates
         kanton = match.iloc[0]["Kanton"]
         region = str(match.iloc[0]["Region"])
         return kanton, region
 
     except FileNotFoundError:
-        print(f"❌ File not found: {pth}")
+        logger.error(f"❌ File not found: {pth}")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        logger.exception(f"❌ Unexpected error: {e}")
 
     return None
 
@@ -332,20 +326,20 @@ def GetKVNameFromBAGNumber(BAGNumber: int, pth: str) -> str:
     for Sheet in sheet_names:
         try:
             Data = pd.read_excel(pth, sheet_name=Sheet)
-            print(f"✅ File loaded successfully (Sheet: {Sheet}).")
+            logger.success(f"✅ File loaded successfully (Sheet: {Sheet}).")
             if "Nummer" in Data.columns and "Name" in Data.columns:
                 result = Data.loc[Data["Nummer"] == BAGNumber, "Name"]
                 if not result.empty:
                     return result.iloc[0].strip()
                 else:
-                    print(f"❌ BAG number {BAGNumber} not found in the file.")
+                    logger.error(f"❌ BAG number {BAGNumber} not found in the file.")
                     return None
             else:
-                print("❌ Columns 'Nummer' and/or 'Name' not found in the sheet.")
+                logger.error("❌ Columns 'Nummer' and/or 'Name' not found in the sheet.")
         except ValueError:
-            continue  # Try the next possible sheet name
+            continue
         except Exception as e:
-            print(f"❌ Error loading file/sheet: {e}")
+            logger.exception(f"❌ Error loading file/sheet: {e}")
             return None
-    print("❌ None of the possible sheets found in the file.")
+    logger.error("❌ None of the possible sheets found in the file.")
     return None
