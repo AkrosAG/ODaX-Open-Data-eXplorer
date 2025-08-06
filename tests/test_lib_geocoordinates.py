@@ -2,6 +2,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+import sys
+import os
+
+# Add the parent directory to sys.path to import the module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ⬇️ change this import to your actual module path/file name
 from imping.nabel_airquality.lib_geocoordinates import (
