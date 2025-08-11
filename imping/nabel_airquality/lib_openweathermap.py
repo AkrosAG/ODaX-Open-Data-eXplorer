@@ -7,6 +7,7 @@ allowing retrieval of current air pollution data for any location by coordinates
 
 import requests
 from typing import Dict, Any, Optional
+from loguru import logger
 
 
 def get_air_quality(
@@ -47,13 +48,17 @@ def get_air_quality(
         }
         Returns None if an error occurs during the API request.
     """
-    url = f"https://api.openweathermap.org/data/2.5/air_pollution?lat={latitude}&lon={longitude}&appid={api_key}"
+    url = (
+        f"https://api.openweathermap.org/data/2.5/air_pollution"
+        f"?lat={latitude}&lon={longitude}&appid={api_key}"
+    )
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise an exception for bad status codes
         data = response.json()
         return data
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching data: {e}")
+        logger.error(f"Error fetching data from OpenWeatherMap for ({latitude}, {longitude}): {e}")
+        # If you want stack trace for debugging, replace with: logger.exception(...)
         return None

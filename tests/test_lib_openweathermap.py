@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 import sys
 import os
 
@@ -39,24 +39,22 @@ def test_get_air_quality_success():
 
         data = get_air_quality(lat, lon, key)
 
-        # called exactly once with the expected URL
         expected_url = (
             f"https://api.openweathermap.org/data/2.5/air_pollution"
             f"?lat={lat}&lon={lon}&appid={key}"
         )
-        mock_get.assert_called_once_with(expected_url)
+        mock_get.assert_called_once_with(expected_url, timeout=ANY)
 
         assert data is fake_payload
         assert data["coord"] == {"lon": lon, "lat": lat}
         assert data["list"][0]["main"]["aqi"] == 2
 
 
-def test_get_air_quality_http_error_returns_none(capsys):
+def test_get_air_quality_http_error_returns_none():
     lat, lon, key = 46.0, 7.0, "TEST_KEY"
 
     with patch("imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
         resp = MagicMock()
-        # Simulate HTTP error on raise_for_status()
         from requests.exceptions import HTTPError
 
         resp.raise_for_status.side_effect = HTTPError("Bad Request")
@@ -65,14 +63,10 @@ def test_get_air_quality_http_error_returns_none(capsys):
         result = get_air_quality(lat, lon, key)
         assert result is None
 
-        out = capsys.readouterr().out
-        assert "Error fetching data" in out
 
-
-def test_get_air_quality_request_exception_returns_none(capsys):
+def test_get_air_quality_request_exception_returns_none():
     lat, lon, key = 0.0, 0.0, "KEY"
 
-    # Simulate a connection error thrown by requests.get itself
     from requests.exceptions import RequestException
 
     with patch("imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
@@ -80,6 +74,3 @@ def test_get_air_quality_request_exception_returns_none(capsys):
 
         result = get_air_quality(lat, lon, key)
         assert result is None
-
-        out = capsys.readouterr().out
-        assert "Error fetching data" in out
