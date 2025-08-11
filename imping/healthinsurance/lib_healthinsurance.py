@@ -40,18 +40,21 @@ def LoadData(pth: str) -> Optional[pd.DataFrame]:
     """
     try:
         Data = pd.read_csv(pth, sep=";", encoding="latin1")
-        logger.success("✅ File loaded successfully.")
+        logger.success("✅ File loaded successfully.")  # or logger.info
         return Data
     except FileNotFoundError:
         logger.error(f"❌ File not found: {pth}")
+        return None
     except UnicodeDecodeError as e:
         logger.error(f"❌ Encoding error while reading the file: {e}")
+        return None
     except pd.errors.ParserError as e:
         logger.error(f"❌ Error while parsing the CSV file: {e}")
+        return None
     except Exception as e:
-        logger.exception(f"❌ Unexpected error: {e}")
-
-    return None
+        # 👇 don't include exc_info / don't use logger.exception
+        logger.error(f"❌ Unexpected error: {e}")
+        return None
 
 
 def GetRegion(Data: pd.DataFrame, Kanton: str) -> Optional[List[str]]:
@@ -118,7 +121,7 @@ def GetMunicipalities_MultipleFeeRegions(
     except pd.errors.ParserError as e:
         logger.error(f"❌ Error while parsing the file: {e}")
     except Exception as e:
-        logger.exception(f"❌ Unexpected error: {e}")
+        logger.error(f"❌ Unexpected error: {e}")
 
     return None
 
@@ -183,7 +186,7 @@ def GetKantonRegionFromGemeinde(pth: str, Gemeinde: str) -> Optional[Tuple[str, 
 
         match = Data[
             Data["Gemeinde"].str.strip().str.lower() == Gemeinde.strip().lower()
-            ]
+        ]
 
         if match.empty:
             logger.warning(f"⚠️ Gemeinde '{Gemeinde}' not found.")
@@ -196,8 +199,7 @@ def GetKantonRegionFromGemeinde(pth: str, Gemeinde: str) -> Optional[Tuple[str, 
     except FileNotFoundError:
         logger.error(f"❌ File not found: {pth}")
     except Exception as e:
-        logger.exception(f"❌ Unexpected error: {e}")
-
+        logger.error(f"❌ Unexpected error: {e}")
     return None
 
 
@@ -335,11 +337,13 @@ def GetKVNameFromBAGNumber(BAGNumber: int, pth: str) -> str:
                     logger.error(f"❌ BAG number {BAGNumber} not found in the file.")
                     return None
             else:
-                logger.error("❌ Columns 'Nummer' and/or 'Name' not found in the sheet.")
+                logger.error(
+                    "❌ Columns 'Nummer' and/or 'Name' not found in the sheet."
+                )
         except ValueError:
             continue
         except Exception as e:
-            logger.exception(f"❌ Error loading file/sheet: {e}")
+            logger.error(f"❌ Error loading file/sheet: {e}")
             return None
     logger.error("❌ None of the possible sheets found in the file.")
     return None
