@@ -58,6 +58,9 @@ APIKeyAirIQ = ''
 Due to an error when using superset which was based on a bug in the marshmellow package 4.0.0, we have downgraded the marshmellow package to the previous version. This may get obsolete in the future.
 
 
+# Deployment
+In case, the execution of a bash script fails, please execute the following command:
+```sudo apt install dos2unix``` and next ```dos2unix BASH-Script.sh```. It ensures, that the line endings are correct and an execution on a Linux system is possible. 
 
 # Architecture
 
