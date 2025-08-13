@@ -21,7 +21,7 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 2) Checkout the branch ```develop```.
 3) Delete the folder ```.vitualenvs``` in ```/home/{USER}``` if it exists.
 4) Navigate to the root directory of your project ```/home/{USER}/ODaX-Open-Data-eXplorer```.
-5) Create a virtual environment via python3.1X -m venv venv
+5) Create a virtual environment via ```python3.11 -m venv venv```. At the moment, apache superset requries python 3.11.
 6) If step 4 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
 7) Using ```wsl```, activate the virtual environment by ```source venv/bin/activate```.
 8) Update pip via ```pip install --upgrade pip```
@@ -33,6 +33,20 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 14) Run the python scripts from the root directory in the terminal or use the Pycharm ```Run```/```Debug``` functionality. Remember to set the ```Working directory``` in the ```Run/ Debug configuration``` to the project root directory.
 15) Side note: If you want to run a Python file as a Jupyter Notebook, you can right-click on the file and select ```Convert to Jupyter Notebook```.
 
+### Installation of podman
+In WSL, the linux distribution Ubuntu is emulated. Please follow the installation steps for Ubuntu documented at https://podman.io/docs/installation. Mainly, ```sudo apt -y install podman``` needs to be executed.
+
+### Installation of superset
+For using superset, several Linux packages need to be added. Please follow the installation steps documented at https://superset.apache.org/docs/installation/pypi for the Ubuntu 24.04 LTS distribution.
+
+### Installation of postgresql
+Please follow the installation steps documented at https://www.postgresql.org/download/linux/ubuntu/ to install postgresql in your distribution packages.
+Mainly, the command ```sudo apt install postgresql``` that needs to be executed.
+
+### Installation of the superset connector to postgresql
+``` sudo apt install libpq-dev```
+```poetry add psycopg2```
+
 ## .env file
 Please make sure to get an API key from the website https://home.openweathermap.org/ for receiving the current air quality data via a REST API. Optionally, if you want to use the AirIQ air quality data, you can request an API key from  https://www.iqair.com/ . 
 Create an .env file in the project root and add the API keys as values of the following variables:
@@ -40,7 +54,13 @@ Create an .env file in the project root and add the API keys as values of the fo
 APIKeyOpenWeatherMap = ""
 APIKeyAirIQ = ''
 ```
+## Further information
+Due to an error when using superset which was based on a bug in the marshmellow package 4.0.0, we have downgraded the marshmellow package to the previous version. This may get obsolete in the future.
 
+
+# Deployment
+In case, the execution of a bash script fails, please execute the following command:
+```sudo apt install dos2unix``` and next ```dos2unix BASH-Script.sh```. It ensures, that the line endings are correct and an execution on a Linux system is possible. 
 
 # Architecture
 
@@ -52,7 +72,7 @@ ODaX follows a modular architecture designed for flexibility and extensibility i
 
 3. **Analysis Layer**: This layer combines data from different sources to extract insights. It includes functions for correlating data (e.g., air quality with health insurance fees) and performing statistical analyses.
 
-4. **Visualization Layer**: The project uses Plotly and Dash for creating interactive visualizations and dashboards to present the analysis results.
+4. **Visualization Layer**: The project uses Apache Superset for creating interactive visualizations and dashboards to present the analysis results.
 
 5. **Notebook Interface**: Jupyter notebooks provide an interactive environment for data exploration and analysis, allowing users to combine code, visualizations, and documentation.
 
