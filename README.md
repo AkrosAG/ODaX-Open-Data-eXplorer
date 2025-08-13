@@ -8,7 +8,7 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 
 ### ssh-key setup
 1) To generate an ssh-key use ```ssh-keygen -t ecdsa``` in the .ssh folder of your Windows user account, e.g., ```C:\Users\{USER}\.ssh``` .
-2) Then open the Windows explorer and type ```\\wsl$\Ubuntu\home\{USER}``` in the explorer. If there is not already a folder ```.ssh```, create one. Then copy the generated ssh keys from ```C:\Users\{USER}\.ssh``` to the ```.ssh``` folder in the wsl file system. 
+2) Then open the Windows explorer and type ```\\wsl.localhost\Ubuntu\home\{USER}``` in the explorer. If there is not already a folder ```.ssh```, create one. Then copy the generated ssh keys from ```C:\Users\{USER}\.ssh``` to the ```.ssh``` folder in the wsl file system. 
 3) Please add your public ssh key to your GitHub account.
 
 ### Installation of Pycharm
