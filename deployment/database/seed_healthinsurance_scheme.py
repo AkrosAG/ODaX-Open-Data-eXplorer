@@ -3,12 +3,13 @@ import re
 import json
 import math
 import pandas as pd
-from typing import Any, Optional,Sequence, List
+from typing import Any, Optional, Sequence, List
 from sqlalchemy.exc import IntegrityError, DataError
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
 
 from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_PerCanton
+
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
 
@@ -74,7 +75,6 @@ def upsert_canton(conn, code: str, name: str):
         ),
         {"code": code, "name": name},
     )
-
 
 
 def upsert_fee_region(conn, canton_code: str, region_no: int) -> int:
@@ -246,7 +246,9 @@ def load_municipalities_and_regions(conn):
     # vorberechnete Menge der in XLS vorhandenen Kantone für schnelle Abfragen
     xls_cantons = set(
         normalize_canton_strict(v)
-        for v in (df_municipality["Kanton"] if "Kanton" in df_municipality.columns else [])
+        for v in (
+            df_municipality["Kanton"] if "Kanton" in df_municipality.columns else []
+        )
     )
 
     # CSV laden (kleiner Ausschnitt) und Spalten trimmen
@@ -294,7 +296,9 @@ def load_municipalities_and_regions(conn):
                 municipalities = []
 
         # Upsert aller Kandidaten
-        for g in sorted(set(str(m).strip() for m in municipalities if m and str(m).strip())):
+        for g in sorted(
+            set(str(m).strip() for m in municipalities if m and str(m).strip())
+        ):
             key = (canton_code, region_no, g)
             if key in seen_muni:
                 continue
@@ -365,19 +369,27 @@ def seed_lookups(conn):
 
 
 import unicodedata
+
 CANTON_ALIASES = {
-    "ZE": "ZG",      # ← change/remove if your file means something else
+    "ZE": "ZG",  # ← change/remove if your file means something else
     "ZUERICH": "ZH",
     "ZURICH": "ZH",
     "GENEVE": "GE",
     "GENF": "GE",
 }
 
+
 def strip_accents(s: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+    )
+
 
 # reverse map: full name -> code
-name_to_code = {strip_accents(v).upper(): k for k, v in swiss_cantons_abbr_to_name.items()}
+name_to_code = {
+    strip_accents(v).upper(): k for k, v in swiss_cantons_abbr_to_name.items()
+}
+
 
 def normalize_canton_strict(val) -> str | None:
     if val is None:
@@ -405,15 +417,23 @@ def ensure_age_subgroup(conn, code: str | None) -> str | None:
         return None
     c = str(code).strip().upper()
     if re.fullmatch(r"K\d+", c):
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             INSERT INTO public.age_subgroups (code, label, age_class_code)
             VALUES (:c, :l, 'AKL-KIN')
             ON CONFLICT (code) DO UPDATE SET label = EXCLUDED.label, age_class_code = EXCLUDED.age_class_code;
-        """), {"c": c, "l": f"Kinder {c}"})
+        """
+            ),
+            {"c": c, "l": f"Kinder {c}"},
+        )
         return c
     # Keep as-is only if it already exists
-    exists = conn.execute(text("SELECT 1 FROM public.age_subgroups WHERE code=:c"), {"c": c}).first()
+    exists = conn.execute(
+        text("SELECT 1 FROM public.age_subgroups WHERE code=:c"), {"c": c}
+    ).first()
     return c if exists else None
+
 
 def get_municipality_ids(
     conn,
@@ -434,6 +454,7 @@ def get_municipality_ids(
 
     rows = result.fetchall()
     return [row[0] for row in rows] if rows else []
+
 
 def load_table_as_df(
     conn,
@@ -477,14 +498,34 @@ def load_table_as_df(
 def load_fees(conn):
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
     df = df.head(10)
-    premium_col = next((c for c in ["Praemie","Prämie","Monatspraemie","Monatsprämie",
-                                    "Praemie_Monat","Betrag","Fee","Preis"] if c in df.columns), None)
+    premium_col = next(
+        (
+            c
+            for c in [
+                "Praemie",
+                "Prämie",
+                "Monatspraemie",
+                "Monatsprämie",
+                "Praemie_Monat",
+                "Betrag",
+                "Fee",
+                "Preis",
+            ]
+            if c in df.columns
+        ),
+        None,
+    )
     if not premium_col:
         raise RuntimeError("Premium column not found")
 
     # Optional: quick pre-scan to warn about bad cantons
-    bad = sorted({str(v) for v in df["Kanton"].dropna().unique()
-                  if not normalize_canton_strict(v)})
+    bad = sorted(
+        {
+            str(v)
+            for v in df["Kanton"].dropna().unique()
+            if not normalize_canton_strict(v)
+        }
+    )
     if bad:
         print("[WARN] Unbekannte Kantonseinträge im CSV:", bad)
 
@@ -500,19 +541,21 @@ def load_fees(conn):
             print(f"[SKIP] Row {i}: invalid region '{r.get('Region')}'")
             continue
 
-        age_class_code = (str(r.get("Altersklasse") or "").strip() or None)
+        age_class_code = str(r.get("Altersklasse") or "").strip() or None
         if not age_class_code:
             print(f"[SKIP] Row {i}: missing Altersklasse")
             continue
 
-        age_subgroup_code = ensure_age_subgroup(conn, str(r.get("Altersuntergruppe") or "").strip() or None)
+        age_subgroup_code = ensure_age_subgroup(
+            conn, str(r.get("Altersuntergruppe") or "").strip() or None
+        )
         accident_included = parse_accident_included(r.get("Unfalleinschluss", ""))
         franchise_amount = parse_franchise_amount(r.get("Franchise"))
         if franchise_amount is None:
             print(f"[SKIP] Row {i}: invalid Franchise '{r.get('Franchise')}'")
             continue
 
-        tariff_type_code = (str(r.get("Tariftyp") or "").strip() or None)
+        tariff_type_code = str(r.get("Tariftyp") or "").strip() or None
         if not tariff_type_code:
             print(f"[SKIP] Row {i}: missing Tariftyp")
             continue
@@ -530,7 +573,9 @@ def load_fees(conn):
         try:
             with conn.begin_nested():  # -> SAVEPOINT
                 fee_region_id = upsert_fee_region(conn, canton_code, region_no)
-                s_municipalities_id = get_municipality_ids(conn, fee_region_id, canton_code)
+                s_municipalities_id = get_municipality_ids(
+                    conn, fee_region_id, canton_code
+                )
 
                 # (Optionally ensure insurer exists; else skip)
                 insurer_bag = int(r.get("Versicherer"))
@@ -550,10 +595,16 @@ def load_fees(conn):
                         "currency": "CHF",
                         "monthly_premium": premium,
                         "dataset_id": None,
-                        "raw_source_metadata": json.dumps({"row_idx": int(i),
-                                                           "source_file": os.path.basename(CSV_FEES)}),
+                        "raw_source_metadata": json.dumps(
+                            {
+                                "row_idx": int(i),
+                                "source_file": os.path.basename(CSV_FEES),
+                            }
+                        ),
                     }
-                    insert_fee(conn, row)  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
+                    insert_fee(
+                        conn, row
+                    )  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
         except IntegrityError as e:
             # Rolls back to the SAVEPOINT automatically when exiting the with-block
             print(f"[SKIP] Row {i}: integrity error -> {e.orig.diag.message_primary}")
@@ -561,6 +612,7 @@ def load_fees(conn):
         except DataError as e:
             print(f"[SKIP] Row {i}: data error -> {e}")
             continue
+
 
 def main():
     eng = engine()
@@ -576,6 +628,7 @@ def main():
 
         load_fees(conn)  # uses per-row savepoints
     print("✅ Load complete.")
+
 
 if __name__ == "__main__":
     main()
