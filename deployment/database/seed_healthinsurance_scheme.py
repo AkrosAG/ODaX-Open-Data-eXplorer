@@ -7,7 +7,8 @@ from typing import Any, Optional,Sequence, List
 from sqlalchemy.exc import IntegrityError, DataError
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
-from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_MultipleFeeRegions
+
+from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_PerCanton
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
 
@@ -238,17 +239,67 @@ def load_cantons(conn):
 
 def load_municipalities_and_regions(conn):
     sheet = "Anhang EDI Ver. über die PR"
-    df = pd.read_excel(XLS_MUNIC, sheet_name=sheet)
-    # Expecting columns: Kanton (abbr), Region (int or string), Gemeinde (name)
+    # XLS laden und Spalten trimmen
+    df_municipality = pd.read_excel(XLS_MUNIC, sheet_name=sheet, dtype=str)
+    df_municipality = df_municipality.rename(columns=lambda c: str(c).strip())
+
+    # vorberechnete Menge der in XLS vorhandenen Kantone für schnelle Abfragen
+    xls_cantons = set(
+        normalize_canton_strict(v)
+        for v in (df_municipality["Kanton"] if "Kanton" in df_municipality.columns else [])
+    )
+
+    # CSV laden (kleiner Ausschnitt) und Spalten trimmen
+    df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
+    df = df.head(50)
     df = df.rename(columns=str.strip)
+
+    # Dedup: (canton_code, region_no, municipality_name)
+    seen_muni = set()
+    seen_region = set()
+
     for _, r in df.iterrows():
-        canton = normalize_canton(r["Kanton"])
-        region_no = parse_region_no(r["Region"])
-        gemeinde = str(r["Gemeinde"]).strip()
-        if not canton or not region_no or not gemeinde:
+        # Normalisierung und Validierung
+        canton_code = normalize_canton_strict(r.get("Kanton"))
+        region_no = parse_region_no(r.get("Region"))
+
+        if not canton_code or region_no is None:
             continue
-        fr_id = upsert_fee_region(conn, canton, region_no)
-        upsert_municipality(conn, gemeinde, canton, fr_id)
+
+        # Fee-Region nur einmal anlegen
+        if (canton_code, region_no) not in seen_region:
+            upsert_fee_region(conn, canton_code, region_no)
+            seen_region.add((canton_code, region_no))
+
+        fr_id = upsert_fee_region(conn, canton_code, region_no)
+
+        # Falls CSV eine Gemeinde liefert, diese nehmen
+        g_csv = str(r.get("Gemeinde") or "").strip()
+        if g_csv:
+            key = (canton_code, region_no, g_csv)
+            if key not in seen_muni:
+                upsert_municipality(conn, g_csv, canton_code, fr_id)
+                seen_muni.add(key)
+            continue
+
+        # Sonst: Fallback – komplette Kantonsliste laden (nur wenn XLS den Kanton nicht enthält
+        # oder kein Gemeindename aus CSV verfügbar ist)
+        municipalities = []
+        if canton_code not in xls_cantons:
+            try:
+                canton_name = swiss_cantons_abbr_to_name.get(canton_code)
+                if canton_name:
+                    municipalities = GetMunicipalities_PerCanton(canton_name) or []
+            except Exception:
+                municipalities = []
+
+        # Upsert aller Kandidaten
+        for g in sorted(set(str(m).strip() for m in municipalities if m and str(m).strip())):
+            key = (canton_code, region_no, g)
+            if key in seen_muni:
+                continue
+            upsert_municipality(conn, g, canton_code, fr_id)
+            seen_muni.add(key)
 
 
 def load_insurers(conn):
