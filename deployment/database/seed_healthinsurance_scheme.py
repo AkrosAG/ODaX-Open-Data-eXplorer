@@ -306,6 +306,26 @@ def load_municipalities_and_regions(conn):
             seen_muni.add(key)
 
 
+import hashlib
+from datetime import datetime, timezone
+
+
+def _file_info(path: str) -> dict:
+    """
+    Liefert Datei-Metadaten (size, mtime, sha256).
+    """
+    stat = os.stat(path)
+    size = stat.st_size
+    mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    sha256 = h.hexdigest()
+    return {"size_bytes": size, "modified_at": mtime, "sha256": sha256}
+
+
 def load_insurers(conn):
     # Try common sheet names; your function already does similar
     for sheet in ["Zugelassene Krankenversicherer", "zugelassene krankenversicherer"]:
@@ -496,6 +516,24 @@ def load_table_as_df(
 
 
 def load_fees(conn):
+    # Ermittele den Dataset-Eintrag für die aktuell geladene CSV (per access_url oder Name)
+    ds_row = conn.execute(
+        text(
+            """
+            SELECT dataset_id
+            FROM public.datasets
+            WHERE access_url = :a OR name = :n
+            ORDER BY dataset_id DESC
+            LIMIT 1
+            """
+        ),
+        {
+            "a": os.path.basename(CSV_FEES),
+            "n": "Prämien CH CSV 2025",
+        },
+    ).first()
+    dataset_id = int(ds_row[0]) if ds_row else None
+
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
     df = df.head(10)
     premium_col = next(
@@ -594,7 +632,7 @@ def load_fees(conn):
                         "valid_to": vt,
                         "currency": "CHF",
                         "monthly_premium": premium,
-                        "dataset_id": None,
+                        "dataset_id": dataset_id,
                         "raw_source_metadata": json.dumps(
                             {
                                 "row_idx": int(i),
@@ -614,19 +652,203 @@ def load_fees(conn):
             continue
 
 
+def _json_or_none(d: Optional[dict]) -> Optional[str]:
+    return json.dumps(d) if d is not None else None
+
+
+def _select_id_by_name(conn, table: str, id_col: str, name: str) -> Optional[int]:
+    row = conn.execute(
+        text(f"SELECT {id_col} FROM public.{table} WHERE name = :n LIMIT 1"),
+        {"n": name},
+    ).first()
+    return int(row[0]) if row else None
+
+
+def get_or_create_source(
+    conn,
+    name: str,
+    description: Optional[str] = None,
+    url: Optional[str] = None,
+    license_: Optional[str] = None,
+    raw_source_metadata: Optional[dict] = None,
+) -> int:
+    """
+    Idempotent: sucht Source per name, erzeugt sonst und gibt source_id zurück.
+    """
+    existing = _select_id_by_name(conn, "sources", "source_id", name)
+    if existing:
+        return existing
+
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.sources (name, description, url, license, raw_source_metadata)
+            VALUES (:name, :description, :url, :license, CAST(:raw_meta AS JSONB))
+            RETURNING source_id;
+            """
+        ),
+        {
+            "name": name,
+            "description": description,
+            "url": url,
+            "license": license_,
+            "raw_meta": _json_or_none(raw_source_metadata),
+        },
+    ).first()
+    return int(row[0])
+
+
+def get_or_create_dataset(
+    conn,
+    source_id: int,
+    name: str,
+    description: Optional[str] = None,
+    access_url: Optional[str] = None,
+    update_timestamp: Optional[datetime] = None,
+    metadata: Optional[dict] = None,
+) -> int:
+    """
+    Idempotent: sucht Dataset per name, erzeugt sonst und gibt dataset_id zurück.
+    """
+    existing = _select_id_by_name(conn, "datasets", "dataset_id", name)
+    if existing:
+        return existing
+
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.datasets
+              (source_id, name, description, access_url, update_timestamp, metadata)
+            VALUES
+              (:source_id, :name, :description, :access_url, :update_ts, CAST(:meta AS JSONB))
+            RETURNING dataset_id;
+            """
+        ),
+        {
+            "source_id": source_id,
+            "name": name,
+            "description": description,
+            "access_url": access_url,
+            "update_ts": update_timestamp,
+            "meta": _json_or_none(metadata),
+        },
+    ).first()
+    return int(row[0])
+
+
+def seed_sources_and_datasets(conn):
+    """
+    Legt eine Quelle (BAG) und drei zugehörige Datensätze an (CSV Prämien, XLSX Regionen, XLSX Versicherer-Mapping).
+    Idempotent pro 'name'.
+    """
+    # Quelle
+    source_meta = {
+        "maintainer": "Bundesamt für Gesundheit (BAG)",
+        "contact": None,
+    }
+    source_id = get_or_create_source(
+        conn,
+        name="BAG – Krankenversicherung",
+        description="Offizielle Datengrundlagen zu Prämien, Regionen und Versicherern.",
+        url="https://www.bag.admin.ch/",
+        license_="Open use, ggf. BAG-Hinweise beachten",
+        raw_source_metadata=source_meta,
+    )
+
+    # Datensätze inkl. Datei-Metadaten (falls vorhanden)
+    datasets_to_seed = []
+
+    if CSV_FEES and os.path.exists(CSV_FEES):
+        fi = _file_info(CSV_FEES)
+        datasets_to_seed.append(
+            dict(
+                name="Prämien CH CSV 2025",
+                description="Monatsprämien Grundversicherung (CSV).",
+                access_url=os.path.basename(CSV_FEES),
+                update_timestamp=fi["modified_at"],
+                metadata={
+                    "file": {
+                        "path": CSV_FEES,
+                        "size_bytes": fi["size_bytes"],
+                        "sha256": fi["sha256"],
+                    },
+                    "format": {"type": "csv", "sep": ";", "encoding": "latin1"},
+                },
+            )
+        )
+
+    if XLS_MUNIC and os.path.exists(XLS_MUNIC):
+        fi = _file_info(XLS_MUNIC)
+        datasets_to_seed.append(
+            dict(
+                name="Prämienregionen ab 2025 (XLSX)",
+                description="Mapping Kantone/Regionen/Gemeinden.",
+                access_url=os.path.basename(XLS_MUNIC),
+                update_timestamp=fi["modified_at"],
+                metadata={
+                    "file": {
+                        "path": XLS_MUNIC,
+                        "size_bytes": fi["size_bytes"],
+                        "sha256": fi["sha256"],
+                    },
+                    "format": {"type": "xlsx", "sheet": "Anhang EDI Ver. über die PR"},
+                },
+            )
+        )
+
+    if XLS_INSURERS and os.path.exists(XLS_INSURERS):
+        fi = _file_info(XLS_INSURERS)
+        datasets_to_seed.append(
+            dict(
+                name="BAG Versicherer Mapping (XLSX)",
+                description="BAG-Nummer zu Krankenversicherer-Name.",
+                access_url=os.path.basename(XLS_INSURERS),
+                update_timestamp=fi["modified_at"],
+                metadata={
+                    "file": {
+                        "path": XLS_INSURERS,
+                        "size_bytes": fi["size_bytes"],
+                        "sha256": fi["sha256"],
+                    },
+                    "format": {
+                        "type": "xlsx",
+                        "sheets": [
+                            "Zugelassene Krankenversicherer",
+                            "zugelassene krankenversicherer",
+                        ],
+                    },
+                },
+            )
+        )
+
+    # Anlegen (idempotent per name)
+    for ds in datasets_to_seed:
+        get_or_create_dataset(
+            conn,
+            source_id=source_id,
+            name=ds["name"],
+            description=ds.get("description"),
+            access_url=ds.get("access_url"),
+            update_timestamp=ds.get("update_timestamp"),
+            metadata=ds.get("metadata"),
+        )
+
+
 def main():
     eng = engine()
     md = MetaData()
     with eng.begin() as conn:  # single outer transaction; commit once at end
         reflect(md, eng)
-
+        seed_sources_and_datasets(conn)
+        """
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
 
         load_municipalities_and_regions(conn)
-
+        """
         load_fees(conn)  # uses per-row savepoints
+
     print("✅ Load complete.")
 
 
