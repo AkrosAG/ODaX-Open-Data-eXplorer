@@ -3,11 +3,11 @@ import re
 import json
 import math
 import pandas as pd
-from typing import Any, Optional
+from typing import Any, Optional,Sequence, List
 from sqlalchemy.exc import IntegrityError, DataError
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
-
+from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_MultipleFeeRegions
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
 
@@ -73,7 +73,7 @@ def upsert_canton(conn, code: str, name: str):
         ),
         {"code": code, "name": name},
     )
-    f=3
+
 
 
 def upsert_fee_region(conn, canton_code: str, region_no: int) -> int:
@@ -364,9 +364,68 @@ def ensure_age_subgroup(conn, code: str | None) -> str | None:
     exists = conn.execute(text("SELECT 1 FROM public.age_subgroups WHERE code=:c"), {"c": c}).first()
     return c if exists else None
 
+def get_municipality_ids(
+    conn,
+    fee_region_id: int,
+    canton_code: str,
+) -> List[int]:
+    result = conn.execute(
+        text(
+            """
+            SELECT municipality_id
+            FROM public.municipalities
+            WHERE fee_region_id = :f
+              AND canton_code = :c
+            """
+        ),
+        {"f": fee_region_id, "c": canton_code},
+    )
+
+    rows = result.fetchall()
+    return [row[0] for row in rows] if rows else []
+
+def load_table_as_df(
+    conn,
+    table: str,
+    schema: str = "public",
+    columns: Optional[Sequence[str]] = None,
+    where: Optional[str] = None,
+    params: Optional[dict] = None,
+):
+    """
+    Lädt eine Tabelle aus Postgres als pandas.DataFrame.
+
+    Args:
+        conn: SQLAlchemy Connection oder Engine.
+        table: Tabellenname (ohne Schema).
+        schema: Schema-Name (Default: "public").
+        columns: Optionale Liste der Spaltennamen. Wenn None -> "*".
+        where: Optionaler WHERE-Teil ohne das Wort "WHERE" (z.B. 'id > :min_id').
+        params: Bind-Parameter für das WHERE (z.B. {'min_id': 10}).
+
+    Returns:
+        pd.DataFrame
+    """
+    # Spaltenauswahl
+    if columns:
+        col_sql = ", ".join([f'"{c}"' for c in columns])
+    else:
+        col_sql = "*"
+
+    # Vollqualifizierter Tabellenname
+    qualified = f'{schema}."{table}"' if schema else f'"{table}"'
+
+    # SQL zusammenbauen
+    sql = f"SELECT {col_sql} FROM {qualified}"
+    if where:
+        sql += f" WHERE {where}"
+
+    return pd.read_sql(text(sql), con=conn, params=params)
+
 
 def load_fees(conn):
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
+    df = df.head(10)
     premium_col = next((c for c in ["Praemie","Prämie","Monatspraemie","Monatsprämie",
                                     "Praemie_Monat","Betrag","Fee","Preis"] if c in df.columns), None)
     if not premium_col:
@@ -420,27 +479,30 @@ def load_fees(conn):
         try:
             with conn.begin_nested():  # -> SAVEPOINT
                 fee_region_id = upsert_fee_region(conn, canton_code, region_no)
+                s_municipalities_id = get_municipality_ids(conn, fee_region_id, canton_code)
+
                 # (Optionally ensure insurer exists; else skip)
                 insurer_bag = int(r.get("Versicherer"))
-                row = {
-                    "insurer_bag": insurer_bag,
-                    "canton_code": canton_code,
-                    "fee_region_id": fee_region_id,
-                    "municipality_id": None,
-                    "age_class_code": age_class_code,
-                    "age_subgroup_code": age_subgroup_code,
-                    "accident_included": accident_included,
-                    "franchise_amount": franchise_amount,
-                    "tariff_type_code": tariff_type_code,
-                    "valid_from": vf,
-                    "valid_to": vt,
-                    "currency": "CHF",
-                    "monthly_premium": premium,
-                    "dataset_id": None,
-                    "raw_source_metadata": json.dumps({"row_idx": int(i),
-                                                       "source_file": os.path.basename(CSV_FEES)}),
-                }
-                insert_fee(conn, row)  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
+                for municipalities_id in s_municipalities_id:
+                    row = {
+                        "insurer_bag": insurer_bag,
+                        "canton_code": canton_code,
+                        "fee_region_id": fee_region_id,
+                        "municipality_id": municipalities_id,
+                        "age_class_code": age_class_code,
+                        "age_subgroup_code": age_subgroup_code,
+                        "accident_included": accident_included,
+                        "franchise_amount": franchise_amount,
+                        "tariff_type_code": tariff_type_code,
+                        "valid_from": vf,
+                        "valid_to": vt,
+                        "currency": "CHF",
+                        "monthly_premium": premium,
+                        "dataset_id": None,
+                        "raw_source_metadata": json.dumps({"row_idx": int(i),
+                                                           "source_file": os.path.basename(CSV_FEES)}),
+                    }
+                    insert_fee(conn, row)  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
         except IntegrityError as e:
             # Rolls back to the SAVEPOINT automatically when exiting the with-block
             print(f"[SKIP] Row {i}: integrity error -> {e.orig.diag.message_primary}")
@@ -454,12 +516,13 @@ def main():
     md = MetaData()
     with eng.begin() as conn:  # single outer transaction; commit once at end
         reflect(md, eng)
-        '''
+
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
+
         load_municipalities_and_regions(conn)
-        '''
+
         load_fees(conn)  # uses per-row savepoints
     print("✅ Load complete.")
 

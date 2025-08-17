@@ -103,9 +103,10 @@ def GetMunicipalities_MultipleFeeRegions(
         sheet = "Anhang EDI Ver. über die PR"
         Data = pd.read_excel(pth, sheet_name=sheet)
         logger.success("✅ File loaded successfully.")
-
+        if not Region.isdigit():
+            Region = Region[-1]
         filtered = (
-            Data[(Data["Kanton"] == Kanton) & (Data["Region"] == int(Region[-1]))][
+            Data[(Data["Kanton"] == Kanton) & (Data["Region"] == int(Region))][
                 "Gemeinde"
             ]
             .dropna()
