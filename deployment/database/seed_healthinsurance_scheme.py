@@ -4,7 +4,7 @@ import json
 import math
 import pandas as pd
 from typing import Any, Optional
-
+from sqlalchemy.exc import IntegrityError, DataError
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
 
@@ -12,7 +12,8 @@ from sqlalchemy.engine import Engine
 PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
 
 # Input files
-BASE = os.getcwd()
+# Determine project root relative to this file to avoid relying on CWD during debug runs
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CSV_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.csv")
 XLS_MUNIC = os.path.join(
     BASE, "data", "healthinsurance", "praemienregionen-ab-2025.xlsx"
@@ -72,6 +73,7 @@ def upsert_canton(conn, code: str, name: str):
         ),
         {"code": code, "name": name},
     )
+    f=3
 
 
 def upsert_fee_region(conn, canton_code: str, region_no: int) -> int:
@@ -170,8 +172,6 @@ def upsert_franchise(conn, amount: int):
 
 
 # Fees insert
-
-
 def insert_fee(conn, row):
     conn.execute(
         text(
@@ -207,7 +207,7 @@ def parse_region_no(region: str) -> Optional[int]:
         return None
     s = str(region).strip()
     m = REGION_RX.search(s)
-    return int(m.group(1)) if m else None
+    return int(m.group(1))
 
 
 def parse_franchise_amount(fr: Any) -> Optional[int]:
@@ -293,6 +293,7 @@ def seed_lookups(conn):
     # Subgroups (examples; add the ones you actually use, like K1/K4/K5)
     for code, label, parent in [
         ("K1", "Einzelkind", "AKL-KIN"),
+        ("K3", "1 Geschwister", "AKL-KIN"),
         ("K4", "1 Geschwister", "AKL-KIN"),
         ("K5", "2+ Geschwister", "AKL-KIN"),
     ]:
@@ -312,133 +313,155 @@ def seed_lookups(conn):
         upsert_franchise(conn, amt)
 
 
+import unicodedata
+CANTON_ALIASES = {
+    "ZE": "ZG",      # ← change/remove if your file means something else
+    "ZUERICH": "ZH",
+    "ZURICH": "ZH",
+    "GENEVE": "GE",
+    "GENF": "GE",
+}
+
+def strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+# reverse map: full name -> code
+name_to_code = {strip_accents(v).upper(): k for k, v in swiss_cantons_abbr_to_name.items()}
+
+def normalize_canton_strict(val) -> str | None:
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    u = s.upper()
+
+    # exact 2-letter code
+    if len(u) == 2 and u in swiss_cantons_abbr_to_name:
+        return u
+
+    # alias by code-ish tokens
+    if u in CANTON_ALIASES:
+        return CANTON_ALIASES[u]
+
+    # try full name (accent-stripped)
+    key = strip_accents(s).upper()
+    return name_to_code.get(key)  # may be None
+
+
+def ensure_age_subgroup(conn, code: str | None) -> str | None:
+    if not code:
+        return None
+    c = str(code).strip().upper()
+    if re.fullmatch(r"K\d+", c):
+        conn.execute(text("""
+            INSERT INTO public.age_subgroups (code, label, age_class_code)
+            VALUES (:c, :l, 'AKL-KIN')
+            ON CONFLICT (code) DO UPDATE SET label = EXCLUDED.label, age_class_code = EXCLUDED.age_class_code;
+        """), {"c": c, "l": f"Kinder {c}"})
+        return c
+    # Keep as-is only if it already exists
+    exists = conn.execute(text("SELECT 1 FROM public.age_subgroups WHERE code=:c"), {"c": c}).first()
+    return c if exists else None
+
+
 def load_fees(conn):
-    # Your CSV: latin-1, semicolon
-    df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1")
-    df = df.rename(columns=str.strip)
+    df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
+    premium_col = next((c for c in ["Praemie","Prämie","Monatspraemie","Monatsprämie",
+                                    "Praemie_Monat","Betrag","Fee","Preis"] if c in df.columns), None)
+    if not premium_col:
+        raise RuntimeError("Premium column not found")
 
-    # Expected columns (from your functions/notebook):
-    # 'Kanton','Region','Versicherer','Unfalleinschluss','Altersklasse','Altersuntergruppe','Franchise','Tariftyp'
-    # plus a premium column (guessing names - adjust as needed)
-    # Try to detect a premium column:
-    premium_col = None
-    for cand in [
-        "Praemie",
-        "Prämie",
-        "Monatspraemie",
-        "Monatsprämie",
-        "Praemie_Monat",
-        "Betrag",
-        "Fee",
-        "Preis",
-    ]:
-        if cand in df.columns:
-            premium_col = cand
-            break
-    if premium_col is None:
-        raise RuntimeError(
-            "Could not find premium column in CSV. Please adjust `premium_col` detection."
-        )
+    # Optional: quick pre-scan to warn about bad cantons
+    bad = sorted({str(v) for v in df["Kanton"].dropna().unique()
+                  if not normalize_canton_strict(v)})
+    if bad:
+        print("[WARN] Unbekannte Kantonseinträge im CSV:", bad)
 
-    # Optional validity info if present; else default
-    valid_from = None
-    if "GueltigAb" in df.columns:
-        valid_from = "GueltigAb"
-    elif "GültigAb" in df.columns:
-        valid_from = "GültigAb"
-
-    # Row-wise insert
-    for _, r in df.iterrows():
-        canton_code = normalize_canton(r.get("Kanton", ""))
+    for i, r in df.iterrows():
+        # Validate/normalize *before* we touch the DB
+        canton_code = normalize_canton_strict(r.get("Kanton"))
         if not canton_code:
+            print(f"[SKIP] Row {i}: invalid canton '{r.get('Kanton')}'")
             continue
 
         region_no = parse_region_no(r.get("Region"))
         if region_no is None:
-            # some datasets store region as pure int already
-            try:
-                region_no = int(r.get("Region"))
-            except Exception:
-                continue
+            print(f"[SKIP] Row {i}: invalid region '{r.get('Region')}'")
+            continue
 
-        # Ensure fee_region exists; municipality_id is optional (None)
-        fee_region_id = upsert_fee_region(conn, canton_code, region_no)
+        age_class_code = (str(r.get("Altersklasse") or "").strip() or None)
+        if not age_class_code:
+            print(f"[SKIP] Row {i}: missing Altersklasse")
+            continue
 
-        # Insurer BAG number
-        try:
-            insurer_bag = int(r.get("Versicherer"))
-        except Exception:
-            continue  # skip rows with invalid insurer id
-
-        # Accident flag
+        age_subgroup_code = ensure_age_subgroup(conn, str(r.get("Altersuntergruppe") or "").strip() or None)
         accident_included = parse_accident_included(r.get("Unfalleinschluss", ""))
-
-        # Age class & subgroup
-        age_class_code = str(r.get("Altersklasse", "")).strip() or None
-        age_subgroup_code = str(r.get("Altersuntergruppe", "")).strip() or None
-        if age_subgroup_code in ["nan", "None", ""]:
-            age_subgroup_code = None
-
-        # Franchise as integer
         franchise_amount = parse_franchise_amount(r.get("Franchise"))
         if franchise_amount is None:
+            print(f"[SKIP] Row {i}: invalid Franchise '{r.get('Franchise')}'")
             continue
 
-        # Tariff type code
-        tariff_type_code = str(r.get("Tariftyp", "")).strip() or None
-        if tariff_type_code is None:
+        tariff_type_code = (str(r.get("Tariftyp") or "").strip() or None)
+        if not tariff_type_code:
+            print(f"[SKIP] Row {i}: missing Tariftyp")
             continue
 
-        # Premium
         try:
             premium = float(str(r.get(premium_col)).replace(",", "."))
         except Exception:
+            print(f"[SKIP] Row {i}: invalid premium '{r.get(premium_col)}'")
             continue
 
-        # Validity
-        vf = str(r.get(valid_from)) if valid_from else "2025-01-01"
+        vf = str(r.get("GueltigAb") or r.get("GültigAb") or "2025-01-01")
         vt = None
 
-        row = {
-            "insurer_bag": insurer_bag,
-            "canton_code": canton_code,
-            "fee_region_id": fee_region_id,
-            "municipality_id": None,
-            "age_class_code": age_class_code,
-            "age_subgroup_code": age_subgroup_code,
-            "accident_included": accident_included,
-            "franchise_amount": franchise_amount,
-            "tariff_type_code": tariff_type_code,
-            "valid_from": vf,
-            "valid_to": vt,
-            "currency": "CHF",
-            "monthly_premium": premium,
-            "dataset_id": None,
-            "raw_source_metadata": json.dumps(
-                {"row_idx": int(_), "source_file": os.path.basename(CSV_FEES)}
-            ),
-        }
-        insert_fee(conn, row)
-
+        # One savepoint per row
+        try:
+            with conn.begin_nested():  # -> SAVEPOINT
+                fee_region_id = upsert_fee_region(conn, canton_code, region_no)
+                # (Optionally ensure insurer exists; else skip)
+                insurer_bag = int(r.get("Versicherer"))
+                row = {
+                    "insurer_bag": insurer_bag,
+                    "canton_code": canton_code,
+                    "fee_region_id": fee_region_id,
+                    "municipality_id": None,
+                    "age_class_code": age_class_code,
+                    "age_subgroup_code": age_subgroup_code,
+                    "accident_included": accident_included,
+                    "franchise_amount": franchise_amount,
+                    "tariff_type_code": tariff_type_code,
+                    "valid_from": vf,
+                    "valid_to": vt,
+                    "currency": "CHF",
+                    "monthly_premium": premium,
+                    "dataset_id": None,
+                    "raw_source_metadata": json.dumps({"row_idx": int(i),
+                                                       "source_file": os.path.basename(CSV_FEES)}),
+                }
+                insert_fee(conn, row)  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
+        except IntegrityError as e:
+            # Rolls back to the SAVEPOINT automatically when exiting the with-block
+            print(f"[SKIP] Row {i}: integrity error -> {e.orig.diag.message_primary}")
+            continue
+        except DataError as e:
+            print(f"[SKIP] Row {i}: data error -> {e}")
+            continue
 
 def main():
     eng = engine()
     md = MetaData()
-    with eng.begin() as conn:
-        # reflect once to ensure schema exists (optional but fine)
+    with eng.begin() as conn:  # single outer transaction; commit once at end
         reflect(md, eng)
-
-        # Seed lookups & reference data
+        '''
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
         load_municipalities_and_regions(conn)
-
-        # Load fees
-        load_fees(conn)
-
+        '''
+        load_fees(conn)  # uses per-row savepoints
     print("✅ Load complete.")
-
 
 if __name__ == "__main__":
     main()
