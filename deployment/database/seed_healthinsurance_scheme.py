@@ -3,16 +3,19 @@ import re
 import json
 import math
 import pandas as pd
-from typing import Any, Optional
-
+from typing import Any, Optional, Sequence, List
+from sqlalchemy.exc import IntegrityError, DataError
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
+
+from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_PerCanton
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
 
 # Input files
-BASE = os.getcwd()
+# Determine project root relative to this file to avoid relying on CWD during debug runs
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CSV_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.csv")
 XLS_MUNIC = os.path.join(
     BASE, "data", "healthinsurance", "praemienregionen-ab-2025.xlsx"
@@ -170,8 +173,6 @@ def upsert_franchise(conn, amount: int):
 
 
 # Fees insert
-
-
 def insert_fee(conn, row):
     conn.execute(
         text(
@@ -207,7 +208,7 @@ def parse_region_no(region: str) -> Optional[int]:
         return None
     s = str(region).strip()
     m = REGION_RX.search(s)
-    return int(m.group(1)) if m else None
+    return int(m.group(1))
 
 
 def parse_franchise_amount(fr: Any) -> Optional[int]:
@@ -238,17 +239,91 @@ def load_cantons(conn):
 
 def load_municipalities_and_regions(conn):
     sheet = "Anhang EDI Ver. über die PR"
-    df = pd.read_excel(XLS_MUNIC, sheet_name=sheet)
-    # Expecting columns: Kanton (abbr), Region (int or string), Gemeinde (name)
+    # XLS laden und Spalten trimmen
+    df_municipality = pd.read_excel(XLS_MUNIC, sheet_name=sheet, dtype=str)
+    df_municipality = df_municipality.rename(columns=lambda c: str(c).strip())
+
+    # vorberechnete Menge der in XLS vorhandenen Kantone für schnelle Abfragen
+    xls_cantons = set(
+        normalize_canton_strict(v)
+        for v in (
+            df_municipality["Kanton"] if "Kanton" in df_municipality.columns else []
+        )
+    )
+
+    # CSV laden (kleiner Ausschnitt) und Spalten trimmen
+    df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
+    df = df.head(50)
     df = df.rename(columns=str.strip)
+
+    # Dedup: (canton_code, region_no, municipality_name)
+    seen_muni = set()
+    seen_region = set()
+
     for _, r in df.iterrows():
-        canton = normalize_canton(r["Kanton"])
-        region_no = parse_region_no(r["Region"])
-        gemeinde = str(r["Gemeinde"]).strip()
-        if not canton or not region_no or not gemeinde:
+        # Normalisierung und Validierung
+        canton_code = normalize_canton_strict(r.get("Kanton"))
+        region_no = parse_region_no(r.get("Region"))
+
+        if not canton_code or region_no is None:
             continue
-        fr_id = upsert_fee_region(conn, canton, region_no)
-        upsert_municipality(conn, gemeinde, canton, fr_id)
+
+        # Fee-Region nur einmal anlegen
+        if (canton_code, region_no) not in seen_region:
+            upsert_fee_region(conn, canton_code, region_no)
+            seen_region.add((canton_code, region_no))
+
+        fr_id = upsert_fee_region(conn, canton_code, region_no)
+
+        # Falls CSV eine Gemeinde liefert, diese nehmen
+        g_csv = str(r.get("Gemeinde") or "").strip()
+        if g_csv:
+            key = (canton_code, region_no, g_csv)
+            if key not in seen_muni:
+                upsert_municipality(conn, g_csv, canton_code, fr_id)
+                seen_muni.add(key)
+            continue
+
+        # Sonst: Fallback – komplette Kantonsliste laden (nur wenn XLS den Kanton nicht enthält
+        # oder kein Gemeindename aus CSV verfügbar ist)
+        municipalities = []
+        if canton_code not in xls_cantons:
+            try:
+                canton_name = swiss_cantons_abbr_to_name.get(canton_code)
+                if canton_name:
+                    municipalities = GetMunicipalities_PerCanton(canton_name) or []
+            except Exception:
+                municipalities = []
+
+        # Upsert aller Kandidaten
+        for g in sorted(
+            set(str(m).strip() for m in municipalities if m and str(m).strip())
+        ):
+            key = (canton_code, region_no, g)
+            if key in seen_muni:
+                continue
+            upsert_municipality(conn, g, canton_code, fr_id)
+            seen_muni.add(key)
+
+
+import hashlib
+from datetime import datetime, timezone
+
+
+def _file_info(path: str) -> dict:
+    """
+    Liefert Datei-Metadaten (size, mtime, sha256).
+    """
+    stat = os.stat(path)
+    size = stat.st_size
+    mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    sha256 = h.hexdigest()
+    return {"size_bytes": size, "modified_at": mtime, "sha256": sha256}
 
 
 def load_insurers(conn):
@@ -293,6 +368,7 @@ def seed_lookups(conn):
     # Subgroups (examples; add the ones you actually use, like K1/K4/K5)
     for code, label, parent in [
         ("K1", "Einzelkind", "AKL-KIN"),
+        ("K3", "1 Geschwister", "AKL-KIN"),
         ("K4", "1 Geschwister", "AKL-KIN"),
         ("K5", "2+ Geschwister", "AKL-KIN"),
     ]:
@@ -312,130 +388,466 @@ def seed_lookups(conn):
         upsert_franchise(conn, amt)
 
 
-def load_fees(conn):
-    # Your CSV: latin-1, semicolon
-    df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1")
-    df = df.rename(columns=str.strip)
+import unicodedata
 
-    # Expected columns (from your functions/notebook):
-    # 'Kanton','Region','Versicherer','Unfalleinschluss','Altersklasse','Altersuntergruppe','Franchise','Tariftyp'
-    # plus a premium column (guessing names - adjust as needed)
-    # Try to detect a premium column:
-    premium_col = None
-    for cand in [
-        "Praemie",
-        "Prämie",
-        "Monatspraemie",
-        "Monatsprämie",
-        "Praemie_Monat",
-        "Betrag",
-        "Fee",
-        "Preis",
-    ]:
-        if cand in df.columns:
-            premium_col = cand
-            break
-    if premium_col is None:
-        raise RuntimeError(
-            "Could not find premium column in CSV. Please adjust `premium_col` detection."
+CANTON_ALIASES = {
+    "ZE": "ZG",  # ← change/remove if your file means something else
+    "ZUERICH": "ZH",
+    "ZURICH": "ZH",
+    "GENEVE": "GE",
+    "GENF": "GE",
+}
+
+
+def strip_accents(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+    )
+
+
+# reverse map: full name -> code
+name_to_code = {
+    strip_accents(v).upper(): k for k, v in swiss_cantons_abbr_to_name.items()
+}
+
+
+def normalize_canton_strict(val) -> str | None:
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    u = s.upper()
+
+    # exact 2-letter code
+    if len(u) == 2 and u in swiss_cantons_abbr_to_name:
+        return u
+
+    # alias by code-ish tokens
+    if u in CANTON_ALIASES:
+        return CANTON_ALIASES[u]
+
+    # try full name (accent-stripped)
+    key = strip_accents(s).upper()
+    return name_to_code.get(key)  # may be None
+
+
+def ensure_age_subgroup(conn, code: str | None) -> str | None:
+    if not code:
+        return None
+    c = str(code).strip().upper()
+    if re.fullmatch(r"K\d+", c):
+        conn.execute(
+            text(
+                """
+            INSERT INTO public.age_subgroups (code, label, age_class_code)
+            VALUES (:c, :l, 'AKL-KIN')
+            ON CONFLICT (code) DO UPDATE SET label = EXCLUDED.label, age_class_code = EXCLUDED.age_class_code;
+        """
+            ),
+            {"c": c, "l": f"Kinder {c}"},
         )
+        return c
+    # Keep as-is only if it already exists
+    exists = conn.execute(
+        text("SELECT 1 FROM public.age_subgroups WHERE code=:c"), {"c": c}
+    ).first()
+    return c if exists else None
 
-    # Optional validity info if present; else default
-    valid_from = None
-    if "GueltigAb" in df.columns:
-        valid_from = "GueltigAb"
-    elif "GültigAb" in df.columns:
-        valid_from = "GültigAb"
 
-    # Row-wise insert
-    for _, r in df.iterrows():
-        canton_code = normalize_canton(r.get("Kanton", ""))
+def get_municipality_ids(
+    conn,
+    fee_region_id: int,
+    canton_code: str,
+) -> List[int]:
+    result = conn.execute(
+        text(
+            """
+            SELECT municipality_id
+            FROM public.municipalities
+            WHERE fee_region_id = :f
+              AND canton_code = :c
+            """
+        ),
+        {"f": fee_region_id, "c": canton_code},
+    )
+
+    rows = result.fetchall()
+    return [row[0] for row in rows] if rows else []
+
+
+def load_table_as_df(
+    conn,
+    table: str,
+    schema: str = "public",
+    columns: Optional[Sequence[str]] = None,
+    where: Optional[str] = None,
+    params: Optional[dict] = None,
+):
+    """
+    Lädt eine Tabelle aus Postgres als pandas.DataFrame.
+
+    Args:
+        conn: SQLAlchemy Connection oder Engine.
+        table: Tabellenname (ohne Schema).
+        schema: Schema-Name (Default: "public").
+        columns: Optionale Liste der Spaltennamen. Wenn None -> "*".
+        where: Optionaler WHERE-Teil ohne das Wort "WHERE" (z.B. 'id > :min_id').
+        params: Bind-Parameter für das WHERE (z.B. {'min_id': 10}).
+
+    Returns:
+        pd.DataFrame
+    """
+    # Spaltenauswahl
+    if columns:
+        col_sql = ", ".join([f'"{c}"' for c in columns])
+    else:
+        col_sql = "*"
+
+    # Vollqualifizierter Tabellenname
+    qualified = f'{schema}."{table}"' if schema else f'"{table}"'
+
+    # SQL zusammenbauen
+    sql = f"SELECT {col_sql} FROM {qualified}"
+    if where:
+        sql += f" WHERE {where}"
+
+    return pd.read_sql(text(sql), con=conn, params=params)
+
+
+def load_fees(conn):
+    # Ermittele den Dataset-Eintrag für die aktuell geladene CSV (per access_url oder Name)
+    ds_row = conn.execute(
+        text(
+            """
+            SELECT dataset_id
+            FROM public.datasets
+            WHERE access_url = :a OR name = :n
+            ORDER BY dataset_id DESC
+            LIMIT 1
+            """
+        ),
+        {
+            "a": os.path.basename(CSV_FEES),
+            "n": "Prämien CH CSV 2025",
+        },
+    ).first()
+    dataset_id = int(ds_row[0]) if ds_row else None
+
+    df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
+    df = df.head(10)
+    premium_col = next(
+        (
+            c
+            for c in [
+                "Praemie",
+                "Prämie",
+                "Monatspraemie",
+                "Monatsprämie",
+                "Praemie_Monat",
+                "Betrag",
+                "Fee",
+                "Preis",
+            ]
+            if c in df.columns
+        ),
+        None,
+    )
+    if not premium_col:
+        raise RuntimeError("Premium column not found")
+
+    # Optional: quick pre-scan to warn about bad cantons
+    bad = sorted(
+        {
+            str(v)
+            for v in df["Kanton"].dropna().unique()
+            if not normalize_canton_strict(v)
+        }
+    )
+    if bad:
+        print("[WARN] Unbekannte Kantonseinträge im CSV:", bad)
+
+    for i, r in df.iterrows():
+        # Validate/normalize *before* we touch the DB
+        canton_code = normalize_canton_strict(r.get("Kanton"))
         if not canton_code:
+            print(f"[SKIP] Row {i}: invalid canton '{r.get('Kanton')}'")
             continue
 
         region_no = parse_region_no(r.get("Region"))
         if region_no is None:
-            # some datasets store region as pure int already
-            try:
-                region_no = int(r.get("Region"))
-            except Exception:
-                continue
+            print(f"[SKIP] Row {i}: invalid region '{r.get('Region')}'")
+            continue
 
-        # Ensure fee_region exists; municipality_id is optional (None)
-        fee_region_id = upsert_fee_region(conn, canton_code, region_no)
+        age_class_code = str(r.get("Altersklasse") or "").strip() or None
+        if not age_class_code:
+            print(f"[SKIP] Row {i}: missing Altersklasse")
+            continue
 
-        # Insurer BAG number
-        try:
-            insurer_bag = int(r.get("Versicherer"))
-        except Exception:
-            continue  # skip rows with invalid insurer id
-
-        # Accident flag
+        age_subgroup_code = ensure_age_subgroup(
+            conn, str(r.get("Altersuntergruppe") or "").strip() or None
+        )
         accident_included = parse_accident_included(r.get("Unfalleinschluss", ""))
-
-        # Age class & subgroup
-        age_class_code = str(r.get("Altersklasse", "")).strip() or None
-        age_subgroup_code = str(r.get("Altersuntergruppe", "")).strip() or None
-        if age_subgroup_code in ["nan", "None", ""]:
-            age_subgroup_code = None
-
-        # Franchise as integer
         franchise_amount = parse_franchise_amount(r.get("Franchise"))
         if franchise_amount is None:
+            print(f"[SKIP] Row {i}: invalid Franchise '{r.get('Franchise')}'")
             continue
 
-        # Tariff type code
-        tariff_type_code = str(r.get("Tariftyp", "")).strip() or None
-        if tariff_type_code is None:
+        tariff_type_code = str(r.get("Tariftyp") or "").strip() or None
+        if not tariff_type_code:
+            print(f"[SKIP] Row {i}: missing Tariftyp")
             continue
 
-        # Premium
         try:
             premium = float(str(r.get(premium_col)).replace(",", "."))
         except Exception:
+            print(f"[SKIP] Row {i}: invalid premium '{r.get(premium_col)}'")
             continue
 
-        # Validity
-        vf = str(r.get(valid_from)) if valid_from else "2025-01-01"
+        vf = str(r.get("GueltigAb") or r.get("GültigAb") or "2025-01-01")
         vt = None
 
-        row = {
-            "insurer_bag": insurer_bag,
-            "canton_code": canton_code,
-            "fee_region_id": fee_region_id,
-            "municipality_id": None,
-            "age_class_code": age_class_code,
-            "age_subgroup_code": age_subgroup_code,
-            "accident_included": accident_included,
-            "franchise_amount": franchise_amount,
-            "tariff_type_code": tariff_type_code,
-            "valid_from": vf,
-            "valid_to": vt,
-            "currency": "CHF",
-            "monthly_premium": premium,
-            "dataset_id": None,
-            "raw_source_metadata": json.dumps(
-                {"row_idx": int(_), "source_file": os.path.basename(CSV_FEES)}
-            ),
-        }
-        insert_fee(conn, row)
+        # One savepoint per row
+        try:
+            with conn.begin_nested():  # -> SAVEPOINT
+                fee_region_id = upsert_fee_region(conn, canton_code, region_no)
+                s_municipalities_id = get_municipality_ids(
+                    conn, fee_region_id, canton_code
+                )
+
+                # (Optionally ensure insurer exists; else skip)
+                insurer_bag = int(r.get("Versicherer"))
+                for municipalities_id in s_municipalities_id:
+                    row = {
+                        "insurer_bag": insurer_bag,
+                        "canton_code": canton_code,
+                        "fee_region_id": fee_region_id,
+                        "municipality_id": municipalities_id,
+                        "age_class_code": age_class_code,
+                        "age_subgroup_code": age_subgroup_code,
+                        "accident_included": accident_included,
+                        "franchise_amount": franchise_amount,
+                        "tariff_type_code": tariff_type_code,
+                        "valid_from": vf,
+                        "valid_to": vt,
+                        "currency": "CHF",
+                        "monthly_premium": premium,
+                        "dataset_id": dataset_id,
+                        "raw_source_metadata": json.dumps(
+                            {
+                                "row_idx": int(i),
+                                "source_file": os.path.basename(CSV_FEES),
+                            }
+                        ),
+                    }
+                    insert_fee(
+                        conn, row
+                    )  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
+        except IntegrityError as e:
+            # Rolls back to the SAVEPOINT automatically when exiting the with-block
+            print(f"[SKIP] Row {i}: integrity error -> {e.orig.diag.message_primary}")
+            continue
+        except DataError as e:
+            print(f"[SKIP] Row {i}: data error -> {e}")
+            continue
+
+
+def _json_or_none(d: Optional[dict]) -> Optional[str]:
+    return json.dumps(d) if d is not None else None
+
+
+def _select_id_by_name(conn, table: str, id_col: str, name: str) -> Optional[int]:
+    row = conn.execute(
+        text(f"SELECT {id_col} FROM public.{table} WHERE name = :n LIMIT 1"),
+        {"n": name},
+    ).first()
+    return int(row[0]) if row else None
+
+
+def get_or_create_source(
+    conn,
+    name: str,
+    description: Optional[str] = None,
+    url: Optional[str] = None,
+    license_: Optional[str] = None,
+    raw_source_metadata: Optional[dict] = None,
+) -> int:
+    """
+    Idempotent: sucht Source per name, erzeugt sonst und gibt source_id zurück.
+    """
+    existing = _select_id_by_name(conn, "sources", "source_id", name)
+    if existing:
+        return existing
+
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.sources (name, description, url, license, raw_source_metadata)
+            VALUES (:name, :description, :url, :license, CAST(:raw_meta AS JSONB))
+            RETURNING source_id;
+            """
+        ),
+        {
+            "name": name,
+            "description": description,
+            "url": url,
+            "license": license_,
+            "raw_meta": _json_or_none(raw_source_metadata),
+        },
+    ).first()
+    return int(row[0])
+
+
+def get_or_create_dataset(
+    conn,
+    source_id: int,
+    name: str,
+    description: Optional[str] = None,
+    access_url: Optional[str] = None,
+    update_timestamp: Optional[datetime] = None,
+    metadata: Optional[dict] = None,
+) -> int:
+    """
+    Idempotent: sucht Dataset per name, erzeugt sonst und gibt dataset_id zurück.
+    """
+    existing = _select_id_by_name(conn, "datasets", "dataset_id", name)
+    if existing:
+        return existing
+
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.datasets
+              (source_id, name, description, access_url, update_timestamp, metadata)
+            VALUES
+              (:source_id, :name, :description, :access_url, :update_ts, CAST(:meta AS JSONB))
+            RETURNING dataset_id;
+            """
+        ),
+        {
+            "source_id": source_id,
+            "name": name,
+            "description": description,
+            "access_url": access_url,
+            "update_ts": update_timestamp,
+            "meta": _json_or_none(metadata),
+        },
+    ).first()
+    return int(row[0])
+
+
+def seed_sources_and_datasets(conn):
+    """
+    Legt eine Quelle (BAG) und drei zugehörige Datensätze an (CSV Prämien, XLSX Regionen, XLSX Versicherer-Mapping).
+    Idempotent pro 'name'.
+    """
+    # Quelle
+    source_meta = {
+        "maintainer": "Bundesamt für Gesundheit (BAG)",
+        "contact": None,
+    }
+    source_id = get_or_create_source(
+        conn,
+        name="BAG – Krankenversicherung",
+        description="Offizielle Datengrundlagen zu Prämien, Regionen und Versicherern.",
+        url="https://www.bag.admin.ch/",
+        license_="Open use, ggf. BAG-Hinweise beachten",
+        raw_source_metadata=source_meta,
+    )
+
+    # Datensätze inkl. Datei-Metadaten (falls vorhanden)
+    datasets_to_seed = []
+
+    if CSV_FEES and os.path.exists(CSV_FEES):
+        fi = _file_info(CSV_FEES)
+        datasets_to_seed.append(
+            dict(
+                name="Prämien CH CSV 2025",
+                description="Monatsprämien Grundversicherung (CSV).",
+                access_url=os.path.basename(CSV_FEES),
+                update_timestamp=fi["modified_at"],
+                metadata={
+                    "file": {
+                        "path": CSV_FEES,
+                        "size_bytes": fi["size_bytes"],
+                        "sha256": fi["sha256"],
+                    },
+                    "format": {"type": "csv", "sep": ";", "encoding": "latin1"},
+                },
+            )
+        )
+
+    if XLS_MUNIC and os.path.exists(XLS_MUNIC):
+        fi = _file_info(XLS_MUNIC)
+        datasets_to_seed.append(
+            dict(
+                name="Prämienregionen ab 2025 (XLSX)",
+                description="Mapping Kantone/Regionen/Gemeinden.",
+                access_url=os.path.basename(XLS_MUNIC),
+                update_timestamp=fi["modified_at"],
+                metadata={
+                    "file": {
+                        "path": XLS_MUNIC,
+                        "size_bytes": fi["size_bytes"],
+                        "sha256": fi["sha256"],
+                    },
+                    "format": {"type": "xlsx", "sheet": "Anhang EDI Ver. über die PR"},
+                },
+            )
+        )
+
+    if XLS_INSURERS and os.path.exists(XLS_INSURERS):
+        fi = _file_info(XLS_INSURERS)
+        datasets_to_seed.append(
+            dict(
+                name="BAG Versicherer Mapping (XLSX)",
+                description="BAG-Nummer zu Krankenversicherer-Name.",
+                access_url=os.path.basename(XLS_INSURERS),
+                update_timestamp=fi["modified_at"],
+                metadata={
+                    "file": {
+                        "path": XLS_INSURERS,
+                        "size_bytes": fi["size_bytes"],
+                        "sha256": fi["sha256"],
+                    },
+                    "format": {
+                        "type": "xlsx",
+                        "sheets": [
+                            "Zugelassene Krankenversicherer",
+                            "zugelassene krankenversicherer",
+                        ],
+                    },
+                },
+            )
+        )
+
+    # Anlegen (idempotent per name)
+    for ds in datasets_to_seed:
+        get_or_create_dataset(
+            conn,
+            source_id=source_id,
+            name=ds["name"],
+            description=ds.get("description"),
+            access_url=ds.get("access_url"),
+            update_timestamp=ds.get("update_timestamp"),
+            metadata=ds.get("metadata"),
+        )
 
 
 def main():
     eng = engine()
     md = MetaData()
-    with eng.begin() as conn:
-        # reflect once to ensure schema exists (optional but fine)
+    with eng.begin() as conn:  # single outer transaction; commit once at end
         reflect(md, eng)
-
-        # Seed lookups & reference data
+        seed_sources_and_datasets(conn)
+        """
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
-        load_municipalities_and_regions(conn)
 
-        # Load fees
-        load_fees(conn)
+        load_municipalities_and_regions(conn)
+        """
+        load_fees(conn)  # uses per-row savepoints
 
     print("✅ Load complete.")
 
