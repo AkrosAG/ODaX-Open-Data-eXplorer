@@ -178,12 +178,12 @@ def insert_fee(conn, row):
         text(
             """
         INSERT INTO public.fees (
-          insurer_bag, canton_code, fee_region_id, municipality_id,
+          insurer_bag, canton_code, fee_region_id,
           age_class_code, age_subgroup_code, accident_included,
           franchise_amount, tariff_type_code, valid_from, valid_to,
           currency, monthly_premium, dataset_id, raw_source_metadata
         ) VALUES (
-          :insurer_bag, :canton_code, :fee_region_id, :municipality_id,
+          :insurer_bag, :canton_code, :fee_region_id,
           :age_class_code, :age_subgroup_code, :accident_included,
           :franchise_amount, :tariff_type_code, :valid_from, :valid_to,
           :currency, :monthly_premium, :dataset_id, :raw_source_metadata
@@ -535,7 +535,6 @@ def load_fees(conn):
     dataset_id = int(ds_row[0]) if ds_row else None
 
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
-
     premium_col = next(
         (
             c
@@ -611,38 +610,37 @@ def load_fees(conn):
         try:
             with conn.begin_nested():  # -> SAVEPOINT
                 fee_region_id = upsert_fee_region(conn, canton_code, region_no)
-                s_municipalities_id = get_municipality_ids(
-                    conn, fee_region_id, canton_code
-                )
+                #s_municipalities_id = get_municipality_ids(
+                #    conn, fee_region_id, canton_code
+                #)
 
                 # (Optionally ensure insurer exists; else skip)
                 insurer_bag = int(r.get("Versicherer"))
-                for municipalities_id in s_municipalities_id:
-                    row = {
-                        "insurer_bag": insurer_bag,
-                        "canton_code": canton_code,
-                        "fee_region_id": fee_region_id,
-                        "municipality_id": municipalities_id,
-                        "age_class_code": age_class_code,
-                        "age_subgroup_code": age_subgroup_code,
-                        "accident_included": accident_included,
-                        "franchise_amount": franchise_amount,
-                        "tariff_type_code": tariff_type_code,
-                        "valid_from": vf,
-                        "valid_to": vt,
-                        "currency": "CHF",
-                        "monthly_premium": premium,
-                        "dataset_id": dataset_id,
-                        "raw_source_metadata": json.dumps(
-                            {
-                                "row_idx": int(i),
-                                "source_file": os.path.basename(CSV_FEES),
-                            }
-                        ),
-                    }
-                    insert_fee(
-                        conn, row
-                    )  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
+                #for municipalities_id in s_municipalities_id:
+                row = {
+                    "insurer_bag": insurer_bag,
+                    "canton_code": canton_code,
+                    "fee_region_id": fee_region_id,
+                    "age_class_code": age_class_code,
+                    "age_subgroup_code": age_subgroup_code,
+                    "accident_included": accident_included,
+                    "franchise_amount": franchise_amount,
+                    "tariff_type_code": tariff_type_code,
+                    "valid_from": vf,
+                    "valid_to": vt,
+                    "currency": "CHF",
+                    "monthly_premium": premium,
+                    "dataset_id": dataset_id,
+                    "raw_source_metadata": json.dumps(
+                        {
+                            "row_idx": int(i),
+                            "source_file": os.path.basename(CSV_FEES),
+                        }
+                    ),
+                }
+                insert_fee(
+                    conn, row
+                )  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
         except IntegrityError as e:
             # Rolls back to the SAVEPOINT automatically when exiting the with-block
             print(f"[SKIP] Row {i}: integrity error -> {e.orig.diag.message_primary}")
@@ -839,6 +837,7 @@ def main():
     md = MetaData()
     with eng.begin() as conn:  # single outer transaction; commit once at end
         reflect(md, eng)
+
         seed_sources_and_datasets(conn)
 
         load_cantons(conn)
