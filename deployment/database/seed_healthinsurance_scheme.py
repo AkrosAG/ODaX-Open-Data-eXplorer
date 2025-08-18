@@ -253,7 +253,7 @@ def load_municipalities_and_regions(conn):
 
     # CSV laden (kleiner Ausschnitt) und Spalten trimmen
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
-    df = df.head(50)
+
     df = df.rename(columns=str.strip)
 
     # Dedup: (canton_code, region_no, municipality_name)
@@ -535,7 +535,7 @@ def load_fees(conn):
     dataset_id = int(ds_row[0]) if ds_row else None
 
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
-    df = df.head(10)
+
     premium_col = next(
         (
             c
@@ -840,13 +840,12 @@ def main():
     with eng.begin() as conn:  # single outer transaction; commit once at end
         reflect(md, eng)
         seed_sources_and_datasets(conn)
-        """
+
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
-
         load_municipalities_and_regions(conn)
-        """
+
         load_fees(conn)  # uses per-row savepoints
 
     print("✅ Load complete.")
