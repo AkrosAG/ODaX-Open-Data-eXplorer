@@ -114,7 +114,6 @@ CREATE TABLE IF NOT EXISTS fees (
   insurer_bag        INT NOT NULL REFERENCES insurers(bag_number) ON DELETE RESTRICT,
   canton_code        CHAR(2) NOT NULL REFERENCES cantons(canton_code) ON DELETE RESTRICT,
   fee_region_id      INT NOT NULL REFERENCES fee_regions(fee_region_id) ON DELETE RESTRICT,
-  municipality_id    INT REFERENCES municipalities(municipality_id) ON DELETE SET NULL,
   age_class_code     TEXT NOT NULL REFERENCES age_classes(code) ON DELETE RESTRICT,
   age_subgroup_code  TEXT REFERENCES age_subgroups(code) ON DELETE SET NULL,
   accident_included  BOOLEAN NOT NULL,
@@ -134,23 +133,7 @@ CREATE TABLE IF NOT EXISTS fees (
 BEGIN;
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='fees' AND column_name='municipality_id_nnz'
-  ) THEN
-    ALTER TABLE public.fees
-      ADD COLUMN municipality_id_nnz INT
-      GENERATED ALWAYS AS (COALESCE(municipality_id, -1)) STORED;
-  END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='fees' AND column_name='age_subgroup_code_nnz'
-  ) THEN
-    ALTER TABLE public.fees
-      ADD COLUMN age_subgroup_code_nnz TEXT
-      GENERATED ALWAYS AS (COALESCE(age_subgroup_code, '')) STORED;
-  END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -159,23 +142,13 @@ BEGIN
   ) THEN
     ALTER TABLE public.fees
     ADD CONSTRAINT ux_fees_dedup UNIQUE (
-      insurer_bag, canton_code, fee_region_id, municipality_id_nnz,
+      insurer_bag, canton_code, fee_region_id,
       age_class_code, age_subgroup_code_nnz, accident_included,
       franchise_amount, tariff_type_code, valid_from
     );
   END IF;
 END $$;
 COMMIT;
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_fees_lookup
-  ON fees (canton_code, fee_region_id, age_class_code, accident_included, franchise_amount, tariff_type_code);
-
-CREATE INDEX IF NOT EXISTS idx_fees_insurer
-  ON fees (insurer_bag);
-
-CREATE INDEX IF NOT EXISTS idx_fees_validity
-  ON fees (valid_from, valid_to);
 
 
 EOF
