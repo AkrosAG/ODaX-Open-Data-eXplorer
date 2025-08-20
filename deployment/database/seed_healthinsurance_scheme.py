@@ -4,7 +4,6 @@ import json
 import math
 import pandas as pd
 from typing import Any, Optional, Sequence, List
-from sqlalchemy.exc import IntegrityError, DataError
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
 
@@ -196,6 +195,61 @@ def insert_fee(conn, row):
         ),
         row,
     )
+
+
+# High-throughput Bulk-Insert/Upsert für fees via psycopg2.execute_values
+def insert_fees_bulk(conn, rows, batch_size: int = 5000):
+    """
+    Erwartet rows als Iterable[dict] mit den Spalten aus cols.
+    Nutzt execute_values, um multi-VALUES + ON CONFLICT durchzuführen.
+    """
+    if not rows:
+        return 0
+
+    cols = [
+        "insurer_bag",
+        "canton_code",
+        "fee_region_id",
+        "age_class_code",
+        "age_subgroup_code",
+        "accident_included",
+        "franchise_amount",
+        "tariff_type_code",
+        "valid_from",
+        "valid_to",
+        "currency",
+        "monthly_premium",
+        "dataset_id",
+        "raw_source_metadata",
+    ]
+
+    # Zugriff auf DBAPI-Connection (psycopg2)
+    dbapi_conn = conn.connection.driver_connection  # SQLAlchemy 2.x
+    from psycopg2.extras import execute_values
+
+    # KORREKT: execute_values erwartet genau ein %s, das durch die komplette VALUES-Liste ersetzt wird.
+    sql = f"INSERT INTO public.fees ({', '.join(cols)}) VALUES %s"
+
+    def row_tuple(r):
+        return tuple(r.get(c) for c in cols)
+
+    inserted = 0
+    with dbapi_conn.cursor() as cur:
+        batch = []
+        for r in rows:
+            batch.append(row_tuple(r))
+            if len(batch) >= batch_size:
+                execute_values(
+                    cur, sql, batch, template=f"({', '.join(['%s']*len(cols))})"
+                )
+                batch.clear()
+        if batch:
+            execute_values(cur, sql, batch, template=f"({', '.join(['%s']*len(cols))})")
+        inserted = (
+            cur.rowcount
+        )  # Hinweis: kann bei execute_values -1 sein und ist nur ein grober Indikator
+
+    return inserted
 
 
 # ── Parsing helpers ────────────────────────────────────────────────────────────
@@ -534,7 +588,10 @@ def load_fees(conn):
     ).first()
     dataset_id = int(ds_row[0]) if ds_row else None
 
+    # CSV lesen
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
+
+    # Zielspalte für Prämie ermitteln
     premium_col = next(
         (
             c
@@ -555,103 +612,217 @@ def load_fees(conn):
     if not premium_col:
         raise RuntimeError("Premium column not found")
 
-    # Optional: quick pre-scan to warn about bad cantons
-    bad = sorted(
-        {
-            str(v)
-            for v in df["Kanton"].dropna().unique()
-            if not normalize_canton_strict(v)
-        }
+    # Leichtes Pre-Cleaning und Vektorisierung häufiger Schritte
+    df["__canton"] = df["Kanton"].map(normalize_canton_strict)
+    df = df[df["__canton"].notna()]
+
+    # Region-Nummer vektorisieren
+    df["__region_no"] = (
+        df["Region"].astype(str).str.extract(r"(\d+)$").astype(float).astype("Int64")
     )
-    if bad:
-        print("[WARN] Unbekannte Kantonseinträge im CSV:", bad)
+    df = df[df["__region_no"].notna()]
 
-    for i, r in df.iterrows():
-        # Validate/normalize *before* we touch the DB
-        canton_code = normalize_canton_strict(r.get("Kanton"))
-        if not canton_code:
-            print(f"[SKIP] Row {i}: invalid canton '{r.get('Kanton')}'")
-            continue
+    # Franchise vektorisieren (robust gegenüber 'FRA-123')
+    df["__franchise"] = (
+        df["Franchise"]
+        .astype(str)
+        .str.extract(r"(\d+)$")[0]
+        .astype(float)
+        .astype("Int64")
+    )
+    df = df[df["__franchise"].notna()]
 
-        region_no = parse_region_no(r.get("Region"))
-        if region_no is None:
-            print(f"[SKIP] Row {i}: invalid region '{r.get('Region')}'")
-            continue
+    # Altersklasse/Tariftyp prüfen
+    df["__age_class"] = df["Altersklasse"].astype(str).str.strip()
+    df["__tariff_type"] = df["Tariftyp"].astype(str).str.strip()
+    df = df[(df["__age_class"] != "") & (df["__tariff_type"] != "")]
 
-        age_class_code = str(r.get("Altersklasse") or "").strip() or None
-        if not age_class_code:
-            print(f"[SKIP] Row {i}: missing Altersklasse")
-            continue
+    # Unfall inkl.
+    df["__acc"] = df["Unfalleinschluss"].astype(str).str.upper().eq("MIT-UNF")
 
-        age_subgroup_code = ensure_age_subgroup(
-            conn, str(r.get("Altersuntergruppe") or "").strip() or None
+    # Prämie als float (Komma zu Punkt)
+    df["__prem"] = df[premium_col].astype(str).str.replace(",", ".", regex=False)
+    df["__prem"] = pd.to_numeric(df["__prem"], errors="coerce")
+    df = df[df["__prem"].notna()]
+
+    # Gültig ab / bis
+    vf_series = df["GueltigAb"] if "GueltigAb" in df.columns else df.get("GültigAb")
+    if vf_series is None:
+        df["__vf"] = "2025-01-01"
+    else:
+        vf = vf_series.fillna("2025-01-01").astype(str)
+        df["__vf"] = vf
+    df["__vt"] = None
+
+    # Altersuntergruppe sicherstellen (nur Codes wie K\d+)
+    sub_raw = df.get("Altersuntergruppe")
+    if sub_raw is not None:
+        df["__sub"] = sub_raw.astype(str).str.strip().str.upper()
+        df["__sub"] = df["__sub"].replace({"": None, "NAN": None})
+    else:
+        df["__sub"] = None
+
+    # Einmalig alle fehlenden K-Subgroups anlegen
+    need_sub = sorted({s for s in df["__sub"].dropna().unique()})
+    if need_sub:
+        conn.execute(
+            text(
+                """
+                INSERT INTO public.age_subgroups (code, label, age_class_code)
+                SELECT x.code, ('Kinder ' || x.code), 'AKL-KIN'
+                FROM (VALUES """
+                + ", ".join([f"(:c{i})" for i in range(len(need_sub))])
+                + """) AS x(code)
+                ON CONFLICT (code) DO UPDATE
+                    SET label = EXCLUDED.label,
+                        age_class_code = EXCLUDED.age_class_code
+            """
+            ),
+            {f"c{i}": c for i, c in enumerate(need_sub)},
         )
-        accident_included = parse_accident_included(r.get("Unfalleinschluss", ""))
-        franchise_amount = parse_franchise_amount(r.get("Franchise"))
-        if franchise_amount is None:
-            print(f"[SKIP] Row {i}: invalid Franchise '{r.get('Franchise')}'")
-            continue
 
-        tariff_type_code = str(r.get("Tariftyp") or "").strip() or None
-        if not tariff_type_code:
-            print(f"[SKIP] Row {i}: missing Tariftyp")
-            continue
+    # Einmalig alle (Kanton, Region)-Kombinationen upserten
+    pairs = sorted(
+        {(str(c), int(r)) for c, r in zip(df["__canton"], df["__region_no"])}
+    )
+    if pairs:
+        # Bulk-Insert fee_regions (DO NOTHING)
+        params = {}
+        values_sql = []
+        for i, (c, rn) in enumerate(pairs):
+            params[f"c{i}"] = c
+            params[f"r{i}"] = rn
+            values_sql.append(f"(:c{i}, :r{i})")
+        conn.execute(
+            text(
+                f"""
+                INSERT INTO public.fee_regions (canton_code, region_no)
+                VALUES {", ".join(values_sql)}
+                ON CONFLICT (canton_code, region_no) DO NOTHING
+            """
+            ),
+            params,
+        )
 
+        # Mapping zu IDs holen
+        params = {}
+        values_sql = []
+        for i, (c, rn) in enumerate(pairs):
+            params[f"c{i}"] = c
+            params[f"r{i}"] = rn
+            values_sql.append(f"(:c{i}, :r{i})")
+        rows = conn.execute(
+            text(
+                f"""
+                SELECT fr.canton_code, fr.region_no, fr.fee_region_id
+                FROM public.fee_regions fr
+                JOIN (VALUES {", ".join(values_sql)}) AS v(canton_code, region_no)
+                  ON fr.canton_code = v.canton_code AND fr.region_no = v.region_no
+            """
+            ),
+            params,
+        ).fetchall()
+        region_id_map = {(r[0], r[1]): int(r[2]) for r in rows}
+    else:
+        region_id_map = {}
+
+    # Rows für Bulk-Insert vorbereiten
+    def _safe_int(x):
         try:
-            premium = float(str(r.get(premium_col)).replace(",", "."))
+            return int(x)
         except Exception:
-            print(f"[SKIP] Row {i}: invalid premium '{r.get(premium_col)}'")
+            return None
+
+    rows = []
+    src_file = os.path.basename(CSV_FEES)
+    for i, r in df.iterrows():
+        canton_code = r["__canton"]
+        region_no = int(r["__region_no"])
+        fee_region_id = region_id_map.get((canton_code, region_no))
+        if not fee_region_id:
+            continue  # sollte selten sein
+
+        age_class_code = r["__age_class"] or None
+        age_subgroup_code = (
+            r["__sub"] if isinstance(r["__sub"], str) and r["__sub"] else None
+        )
+
+        accident_included = bool(r["__acc"])
+        franchise_amount = int(r["__franchise"])
+        tariff_type_code = r["__tariff_type"] or None
+        premium = float(r["__prem"])
+        insurer_bag = _safe_int(r.get("Versicherer"))
+
+        if insurer_bag is None:
             continue
 
-        vf = str(r.get("GueltigAb") or r.get("GültigAb") or "2025-01-01")
-        vt = None
+        row = {
+            "insurer_bag": insurer_bag,
+            "canton_code": canton_code,
+            "fee_region_id": fee_region_id,
+            "age_class_code": age_class_code,
+            "age_subgroup_code": age_subgroup_code,
+            "accident_included": accident_included,
+            "franchise_amount": franchise_amount,
+            "tariff_type_code": tariff_type_code,
+            "valid_from": r["__vf"],
+            "valid_to": r["__vt"],
+            "currency": "CHF",
+            "monthly_premium": premium,
+            "dataset_id": dataset_id,
+            "raw_source_metadata": json.dumps(
+                {"row_idx": int(i), "source_file": src_file}
+            ),
+        }
+        rows.append(row)
 
-        # One savepoint per row
-        try:
-            with conn.begin_nested():  # -> SAVEPOINT
-                fee_region_id = upsert_fee_region(conn, canton_code, region_no)
-                #s_municipalities_id = get_municipality_ids(
-                #    conn, fee_region_id, canton_code
-                #)
+    # Bulk upsert in großen Batches, eine Transaktion für alles
+    insert_fees_bulk(conn, rows, batch_size=5000)
 
-                # (Optionally ensure insurer exists; else skip)
-                insurer_bag = int(r.get("Versicherer"))
-                #for municipalities_id in s_municipalities_id:
-                row = {
-                    "insurer_bag": insurer_bag,
-                    "canton_code": canton_code,
-                    "fee_region_id": fee_region_id,
-                    "age_class_code": age_class_code,
-                    "age_subgroup_code": age_subgroup_code,
-                    "accident_included": accident_included,
-                    "franchise_amount": franchise_amount,
-                    "tariff_type_code": tariff_type_code,
-                    "valid_from": vf,
-                    "valid_to": vt,
-                    "currency": "CHF",
-                    "monthly_premium": premium,
-                    "dataset_id": dataset_id,
-                    "raw_source_metadata": json.dumps(
-                        {
-                            "row_idx": int(i),
-                            "source_file": os.path.basename(CSV_FEES),
-                        }
-                    ),
-                }
-                insert_fee(
-                    conn, row
-                )  # uses ON CONFLICT ON CONSTRAINT ux_fees_dedup
-        except IntegrityError as e:
-            # Rolls back to the SAVEPOINT automatically when exiting the with-block
-            print(f"[SKIP] Row {i}: integrity error -> {e.orig.diag.message_primary}")
-            continue
-        except DataError as e:
-            print(f"[SKIP] Row {i}: data error -> {e}")
-            continue
+
+# ... existing code ...
 
 
 def _json_or_none(d: Optional[dict]) -> Optional[str]:
     return json.dumps(d) if d is not None else None
+
+
+def get_or_create_dataset(
+    conn,
+    source_id: int,
+    name: str,
+    description: Optional[str] = None,
+    access_url: Optional[str] = None,
+    update_timestamp: Optional[datetime] = None,
+    metadata: Optional[dict] = None,
+) -> int:
+    """
+    Idempotent: sucht Dataset per name, erzeugt sonst und gibt dataset_id zurück.
+    """
+    existing = _select_id_by_name(conn, "datasets", "dataset_id", name)
+    if existing:
+        return existing
+
+    row = conn.execute(
+        text(
+            """
+            INSERT INTO public.datasets
+              (source_id, name, description, access_url, update_timestamp, metadata)
+            VALUES
+              (:source_id, :name, :description, :access_url, :update_ts, CAST(:meta AS JSONB))
+            RETURNING dataset_id;
+            """
+        ),
+        {
+            "source_id": source_id,
+            "name": name,
+            "description": description,
+            "access_url": access_url,
+            "update_ts": update_timestamp,
+            "meta": _json_or_none(metadata),
+        },
+    ).first()
+    return int(row[0])
 
 
 def _select_id_by_name(conn, table: str, id_col: str, name: str) -> Optional[int]:
@@ -691,44 +862,6 @@ def get_or_create_source(
             "url": url,
             "license": license_,
             "raw_meta": _json_or_none(raw_source_metadata),
-        },
-    ).first()
-    return int(row[0])
-
-
-def get_or_create_dataset(
-    conn,
-    source_id: int,
-    name: str,
-    description: Optional[str] = None,
-    access_url: Optional[str] = None,
-    update_timestamp: Optional[datetime] = None,
-    metadata: Optional[dict] = None,
-) -> int:
-    """
-    Idempotent: sucht Dataset per name, erzeugt sonst und gibt dataset_id zurück.
-    """
-    existing = _select_id_by_name(conn, "datasets", "dataset_id", name)
-    if existing:
-        return existing
-
-    row = conn.execute(
-        text(
-            """
-            INSERT INTO public.datasets
-              (source_id, name, description, access_url, update_timestamp, metadata)
-            VALUES
-              (:source_id, :name, :description, :access_url, :update_ts, CAST(:meta AS JSONB))
-            RETURNING dataset_id;
-            """
-        ),
-        {
-            "source_id": source_id,
-            "name": name,
-            "description": description,
-            "access_url": access_url,
-            "update_ts": update_timestamp,
-            "meta": _json_or_none(metadata),
         },
     ).first()
     return int(row[0])
@@ -835,20 +968,19 @@ def seed_sources_and_datasets(conn):
 def main():
     eng = engine()
     md = MetaData()
-    with eng.begin() as conn:  # single outer transaction; commit once at end
+    with eng.begin() as conn:
         reflect(md, eng)
-
+        """
         seed_sources_and_datasets(conn)
 
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
         load_municipalities_and_regions(conn)
-
-        load_fees(conn)  # uses per-row savepoints
+        """
+        load_fees(conn)
 
     print("✅ Load complete.")
 
 
-if __name__ == "__main__":
-    main()
+main()

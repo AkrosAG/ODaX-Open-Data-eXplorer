@@ -134,14 +134,6 @@ BEGIN;
 DO $$
 BEGIN
 
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='fees' AND column_name='age_subgroup_code_nnz'
-  ) THEN
-    ALTER TABLE public.fees
-      ADD COLUMN age_subgroup_code_nnz TEXT
-      GENERATED ALWAYS AS (COALESCE(age_subgroup_code, '')) STORED;
-  END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
