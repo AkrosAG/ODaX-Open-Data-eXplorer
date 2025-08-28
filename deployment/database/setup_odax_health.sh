@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS fees (
   accident_included  BOOLEAN NOT NULL,
   franchise_amount   INTEGER NOT NULL REFERENCES franchises(amount) ON DELETE RESTRICT,
   tariff_type_code   TEXT NOT NULL REFERENCES tariff_types(code) ON DELETE RESTRICT,
+  tariff_name        TEXT NOT NULL,
   valid_from         DATE NOT NULL DEFAULT DATE '1900-01-01',
   valid_to           DATE,
   currency           CHAR(3) NOT NULL DEFAULT 'CHF',
@@ -127,6 +128,12 @@ CREATE TABLE IF NOT EXISTS fees (
   raw_source_metadata JSONB
 );
 
+
+ALTER TABLE public.fee_regions
+  ADD CONSTRAINT ux_fee_regions UNIQUE (canton_code, region_no);
+
+ALTER TABLE public.municipalities
+  ADD CONSTRAINT ux_municipalities UNIQUE (name, canton_code);
 
 
 
@@ -143,13 +150,22 @@ BEGIN
     ALTER TABLE public.fees
     ADD CONSTRAINT ux_fees_dedup UNIQUE (
       insurer_bag, canton_code, fee_region_id,
-      age_class_code, age_subgroup_code_nnz, accident_included,
-      franchise_amount, tariff_type_code, valid_from
+      age_class_code, age_subgroup_code, accident_included,
+      franchise_amount, tariff_type_code, valid_from, tariff_name
     );
   END IF;
 END $$;
 COMMIT;
 
+
+
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_fees_lookup
+  ON fees (canton_code, fee_region_id, age_class_code, accident_included, franchise_amount, tariff_type_code, tariff_name);
+
+CREATE INDEX IF NOT EXISTS idx_fees_insurer
+  ON fees (insurer_bag);
 
 EOF
 

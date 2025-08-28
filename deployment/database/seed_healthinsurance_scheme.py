@@ -6,8 +6,14 @@ import pandas as pd
 from typing import Any, Optional, Sequence, List
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.engine import Engine
+import unicodedata
+import hashlib
+from datetime import datetime, timezone
 
-from imping.healthinsurance.lib_healthinsurance import GetMunicipalities_PerCanton
+from imping.healthinsurance.lib_healthinsurance import (
+    GetMunicipalities_PerCanton,
+    GetMunicipalities_MultipleFeeRegions,
+)
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
@@ -16,6 +22,8 @@ PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
 # Determine project root relative to this file to avoid relying on CWD during debug runs
 BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CSV_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.csv")
+XSLX_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.xlsx")
+
 XLS_MUNIC = os.path.join(
     BASE, "data", "healthinsurance", "praemienregionen-ab-2025.xlsx"
 )
@@ -215,6 +223,7 @@ def insert_fees_bulk(conn, rows, batch_size: int = 5000):
         "accident_included",
         "franchise_amount",
         "tariff_type_code",
+        "tariff_name",
         "valid_from",
         "valid_to",
         "currency",
@@ -228,7 +237,9 @@ def insert_fees_bulk(conn, rows, batch_size: int = 5000):
     from psycopg2.extras import execute_values
 
     # KORREKT: execute_values erwartet genau ein %s, das durch die komplette VALUES-Liste ersetzt wird.
-    sql = f"INSERT INTO public.fees ({', '.join(cols)}) VALUES %s"
+    sql = (
+        f"INSERT INTO public.fees ({', '.join(cols)}) VALUES %s ON CONFLICT DO NOTHING"
+    )
 
     def row_tuple(r):
         return tuple(r.get(c) for c in cols)
@@ -291,77 +302,151 @@ def load_cantons(conn):
         upsert_canton(conn, code, name)
 
 
+def fill_fee_regions(conn, df):
+    """
+    Erwartet df mit vektorisiert gesetzten Spalten:
+      df["Kanton"] -> bereits normalisiert (z.B. "ZH", "NW", ...)
+      df["Region"] -> bereits als Zahl (Int64) extrahiert
+    Schreibt (canton_code, region_no) in public.fee_regions (ON CONFLICT DO NOTHING)
+    und liefert ein Mapping {(canton_code, region_no): fee_region_id}.
+    """
+
+    # 1) gültige Paare auswählen und deduplizieren (vektorisiert)
+    df_fr = df.loc[
+        df["Kanton"].notna() & df["Region"].notna(), ["Kanton", "Region"]
+    ].assign(Kanton=lambda x: x["Kanton"].astype(str).str.strip())
+    # nur gültige 2-Buchstaben-Codes
+    df_fr = df_fr[df_fr["Kanton"].str.len() == 2]
+    df_fr = df_fr.drop_duplicates()
+
+    # in Python-Tupel für executemany umwandeln
+    rows = [(c, int(r)) for c, r in df_fr.to_records(index=False)]
+    if not rows:
+        return {}
+
+    # 2) Bulk-Insert mit Upsert
+    conn.execute(
+        text(
+            """
+            INSERT INTO public.fee_regions (canton_code, region_no)
+            VALUES (:canton_code, :region_no)
+            ON CONFLICT (canton_code, region_no) DO NOTHING
+        """
+        ),
+        [{"canton_code": c, "region_no": r} for (c, r) in rows],
+    )
+
+    # 3) IDs zu allen Paaren in einem Rutsch nachladen (JOIN auf VALUES), ggf. in Chunks
+    mapping = {}
+    CHUNK = 1000
+    for i in range(0, len(rows), CHUNK):
+        chunk = rows[i: i + CHUNK]
+        values_sql = []
+        params = {}
+        for j, (c, r) in enumerate(chunk):
+            values_sql.append(f"(:c{j}, :r{j})")
+            params[f"c{j}"] = c
+            params[f"r{j}"] = r
+
+        sql = f"""
+            SELECT fr.fee_region_id, fr.canton_code, fr.region_no
+            FROM public.fee_regions fr
+            JOIN (VALUES {", ".join(values_sql)}) AS v(canton_code, region_no)
+              ON fr.canton_code = v.canton_code AND fr.region_no = v.region_no
+        """
+        for row in conn.execute(text(sql), params):
+            mapping[(row.canton_code, row.region_no)] = row.fee_region_id
+
+    return mapping
+
+
+from collections import Counter
+
+
+def build_municipalities_from_fr_map(fr_map: dict[tuple[str, int], int], pth: str):
+    """
+    fr_map: { (canton_code, region_no): fee_region_id }
+    Returns:
+      muni_by_pair: { (canton_code, region_no): [municipality, ...] }
+      muni_rows:    { (municipality, canton_code, fee_region_id), ... }  # for bulk upsert
+    """
+    pairs = set(fr_map.keys())
+    counts = Counter(cc for (cc, _) in pairs)
+    multi_cantons = {cc for cc, n in counts.items() if n > 1}
+    single_cantons = set(counts) - multi_cantons
+
+    # Map single canton -> its only region_no
+    single_pair_by_canton = {cc: rn for (cc, rn) in pairs if counts[cc] == 1}
+
+    muni_by_pair: dict[tuple[str, int], list[str]] = {}
+
+    # 1) Single-region cantons: call once per canton
+    single_muni_by_canton: dict[str, list[str]] = {}
+    for cc in single_cantons:
+
+        try:
+            lst = GetMunicipalities_PerCanton(swiss_cantons_abbr_to_name[cc]) or []
+        except Exception:
+            lst = []
+        clean = sorted({str(m).strip() for m in lst if m and str(m).strip()})
+        single_muni_by_canton[cc] = clean
+
+    for cc, rn in single_pair_by_canton.items():
+        muni_by_pair[(cc, rn)] = single_muni_by_canton.get(cc, [])
+
+    # 2) Multi-region cantons: call once per (canton, region_no)
+    for cc, rn in pairs:
+        if cc in multi_cantons:
+            try:
+                lst = GetMunicipalities_MultipleFeeRegions(pth, cc, str(rn)) or []
+            except Exception:
+                lst = []
+            clean = sorted({str(m).strip() for m in lst if m and str(m).strip()})
+            muni_by_pair[(cc, rn)] = clean
+
+    # 3) Build rows for bulk upsert: (name, canton_code, fee_region_id)
+    muni_rows = set()
+    for (cc, rn), names in muni_by_pair.items():
+        fr_id = fr_map.get((cc, rn))
+        if fr_id is None:
+            continue
+        for name in names:
+            muni_rows.add((name, cc, fr_id))
+
+    return muni_by_pair, muni_rows
+
+
 def load_municipalities_and_regions(conn):
     sheet = "Anhang EDI Ver. über die PR"
     # XLS laden und Spalten trimmen
     df_municipality = pd.read_excel(XLS_MUNIC, sheet_name=sheet, dtype=str)
     df_municipality = df_municipality.rename(columns=lambda c: str(c).strip())
 
-    # vorberechnete Menge der in XLS vorhandenen Kantone für schnelle Abfragen
-    xls_cantons = set(
-        normalize_canton_strict(v)
-        for v in (
-            df_municipality["Kanton"] if "Kanton" in df_municipality.columns else []
-        )
-    )
-
     # CSV laden (kleiner Ausschnitt) und Spalten trimmen
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
 
     df = df.rename(columns=str.strip)
 
-    # Dedup: (canton_code, region_no, municipality_name)
-    seen_muni = set()
-    seen_region = set()
+    df["Kanton"] = df["Kanton"].map(normalize_canton_strict)
+    df["Region"] = df["Region"].map(parse_region_no)
 
-    for _, r in df.iterrows():
-        # Normalisierung und Validierung
-        canton_code = normalize_canton_strict(r.get("Kanton"))
-        region_no = parse_region_no(r.get("Region"))
-
-        if not canton_code or region_no is None:
-            continue
-
-        # Fee-Region nur einmal anlegen
-        if (canton_code, region_no) not in seen_region:
-            upsert_fee_region(conn, canton_code, region_no)
-            seen_region.add((canton_code, region_no))
-
-        fr_id = upsert_fee_region(conn, canton_code, region_no)
-
-        # Falls CSV eine Gemeinde liefert, diese nehmen
-        g_csv = str(r.get("Gemeinde") or "").strip()
-        if g_csv:
-            key = (canton_code, region_no, g_csv)
-            if key not in seen_muni:
-                upsert_municipality(conn, g_csv, canton_code, fr_id)
-                seen_muni.add(key)
-            continue
-
-        # Sonst: Fallback – komplette Kantonsliste laden (nur wenn XLS den Kanton nicht enthält
-        # oder kein Gemeindename aus CSV verfügbar ist)
-        municipalities = []
-        if canton_code not in xls_cantons:
-            try:
-                canton_name = swiss_cantons_abbr_to_name.get(canton_code)
-                if canton_name:
-                    municipalities = GetMunicipalities_PerCanton(canton_name) or []
-            except Exception:
-                municipalities = []
-
-        # Upsert aller Kandidaten
-        for g in sorted(
-            set(str(m).strip() for m in municipalities if m and str(m).strip())
-        ):
-            key = (canton_code, region_no, g)
-            if key in seen_muni:
-                continue
-            upsert_municipality(conn, g, canton_code, fr_id)
-            seen_muni.add(key)
-
-
-import hashlib
-from datetime import datetime, timezone
+    fr_map = fill_fee_regions(conn, df)
+    muni_by_pair, muni_rows = build_municipalities_from_fr_map(fr_map, XLS_MUNIC)
+    # bulk upsert
+    conn.execute(
+        text(
+            """
+             INSERT INTO public.municipalities (name, canton_code, fee_region_id)
+             VALUES (:name, :canton_code, :fee_region_id) ON CONFLICT (name, canton_code) DO
+             UPDATE
+                 SET fee_region_id = COALESCE (EXCLUDED.fee_region_id, public.municipalities.fee_region_id)
+             """
+        ),
+        [
+            {"name": n, "canton_code": c, "fee_region_id": fid}
+            for (n, c, fid) in muni_rows
+        ],
+    )
 
 
 def _file_info(path: str) -> dict:
@@ -442,17 +527,6 @@ def seed_lookups(conn):
         upsert_franchise(conn, amt)
 
 
-import unicodedata
-
-CANTON_ALIASES = {
-    "ZE": "ZG",  # ← change/remove if your file means something else
-    "ZUERICH": "ZH",
-    "ZURICH": "ZH",
-    "GENEVE": "GE",
-    "GENF": "GE",
-}
-
-
 def strip_accents(s: str) -> str:
     return "".join(
         c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
@@ -476,14 +550,6 @@ def normalize_canton_strict(val) -> str | None:
     # exact 2-letter code
     if len(u) == 2 and u in swiss_cantons_abbr_to_name:
         return u
-
-    # alias by code-ish tokens
-    if u in CANTON_ALIASES:
-        return CANTON_ALIASES[u]
-
-    # try full name (accent-stripped)
-    key = strip_accents(s).upper()
-    return name_to_code.get(key)  # may be None
 
 
 def ensure_age_subgroup(conn, code: str | None) -> str | None:
@@ -590,7 +656,7 @@ def load_fees(conn):
 
     # CSV lesen
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
-
+    # df1 = pd.read_excel(XSLX_FEES).rename(columns=str.strip)
     # Zielspalte für Prämie ermitteln
     premium_col = next(
         (
@@ -613,37 +679,40 @@ def load_fees(conn):
         raise RuntimeError("Premium column not found")
 
     # Leichtes Pre-Cleaning und Vektorisierung häufiger Schritte
-    df["__canton"] = df["Kanton"].map(normalize_canton_strict)
-    df = df[df["__canton"].notna()]
+    df["Kanton"] = df["Kanton"].map(normalize_canton_strict)
+    df = df[df["Kanton"].notna()]
 
     # Region-Nummer vektorisieren
-    df["__region_no"] = (
+    df["Region"] = (
         df["Region"].astype(str).str.extract(r"(\d+)$").astype(float).astype("Int64")
     )
-    df = df[df["__region_no"].notna()]
+    df = df[df["Region"].notna()]
 
     # Franchise vektorisieren (robust gegenüber 'FRA-123')
-    df["__franchise"] = (
+    df["Franchise"] = (
         df["Franchise"]
         .astype(str)
         .str.extract(r"(\d+)$")[0]
         .astype(float)
         .astype("Int64")
     )
-    df = df[df["__franchise"].notna()]
+    df = df[df["Franchise"].notna()]
 
     # Altersklasse/Tariftyp prüfen
-    df["__age_class"] = df["Altersklasse"].astype(str).str.strip()
-    df["__tariff_type"] = df["Tariftyp"].astype(str).str.strip()
-    df = df[(df["__age_class"] != "") & (df["__tariff_type"] != "")]
+    df["Altersklasse"] = df["Altersklasse"].astype(str).str.strip()
+    df["Tariftyp"] = df["Tariftyp"].astype(str).str.strip()
+    df["Tarif"] = df["Tarif"].astype(str).str.strip()
+    df = df[(df["Altersklasse"] != "") & (df["Tariftyp"] != "")]
 
     # Unfall inkl.
-    df["__acc"] = df["Unfalleinschluss"].astype(str).str.upper().eq("MIT-UNF")
+    df["Unfalleinschluss"] = (
+        df["Unfalleinschluss"].astype(str).str.upper().eq("MIT-UNF")
+    )
 
     # Prämie als float (Komma zu Punkt)
-    df["__prem"] = df[premium_col].astype(str).str.replace(",", ".", regex=False)
-    df["__prem"] = pd.to_numeric(df["__prem"], errors="coerce")
-    df = df[df["__prem"].notna()]
+    df["Prämie"] = df[premium_col].astype(str).str.replace(",", ".", regex=False)
+    df["Prämie"] = pd.to_numeric(df["Prämie"], errors="coerce")
+    df = df[df["Prämie"].notna()]
 
     # Gültig ab / bis
     vf_series = df["GueltigAb"] if "GueltigAb" in df.columns else df.get("GültigAb")
@@ -657,13 +726,15 @@ def load_fees(conn):
     # Altersuntergruppe sicherstellen (nur Codes wie K\d+)
     sub_raw = df.get("Altersuntergruppe")
     if sub_raw is not None:
-        df["__sub"] = sub_raw.astype(str).str.strip().str.upper()
-        df["__sub"] = df["__sub"].replace({"": None, "NAN": None})
+        df["Altersuntergruppe"] = sub_raw.astype(str).str.strip().str.upper()
+        df["Altersuntergruppe"] = df["Altersuntergruppe"].replace(
+            {"": None, "NAN": None}
+        )
     else:
-        df["__sub"] = None
+        df["Altersuntergruppe"] = None
 
     # Einmalig alle fehlenden K-Subgroups anlegen
-    need_sub = sorted({s for s in df["__sub"].dropna().unique()})
+    need_sub = sorted({s for s in df["Altersuntergruppe"].dropna().unique()})
     if need_sub:
         conn.execute(
             text(
@@ -682,9 +753,7 @@ def load_fees(conn):
         )
 
     # Einmalig alle (Kanton, Region)-Kombinationen upserten
-    pairs = sorted(
-        {(str(c), int(r)) for c, r in zip(df["__canton"], df["__region_no"])}
-    )
+    pairs = sorted({(str(c), int(r)) for c, r in zip(df["Kanton"], df["Region"])})
     if pairs:
         # Bulk-Insert fee_regions (DO NOTHING)
         params = {}
@@ -736,21 +805,24 @@ def load_fees(conn):
     rows = []
     src_file = os.path.basename(CSV_FEES)
     for i, r in df.iterrows():
-        canton_code = r["__canton"]
-        region_no = int(r["__region_no"])
+        canton_code = r["Kanton"]
+        region_no = int(r["Region"])
         fee_region_id = region_id_map.get((canton_code, region_no))
         if not fee_region_id:
             continue  # sollte selten sein
 
-        age_class_code = r["__age_class"] or None
+        age_class_code = r["Altersklasse"] or None
         age_subgroup_code = (
-            r["__sub"] if isinstance(r["__sub"], str) and r["__sub"] else None
+            r["Altersuntergruppe"]
+            if isinstance(r["Altersuntergruppe"], str) and r["Altersuntergruppe"]
+            else None
         )
 
-        accident_included = bool(r["__acc"])
-        franchise_amount = int(r["__franchise"])
-        tariff_type_code = r["__tariff_type"] or None
-        premium = float(r["__prem"])
+        accident_included = bool(r["Unfalleinschluss"])
+        franchise_amount = int(r["Franchise"])
+        tariff_type_code = r["Tariftyp"] or None
+        tariff_name = r["Tarif"] or None
+        premium = float(r["Prämie"])
         insurer_bag = _safe_int(r.get("Versicherer"))
 
         if insurer_bag is None:
@@ -765,6 +837,7 @@ def load_fees(conn):
             "accident_included": accident_included,
             "franchise_amount": franchise_amount,
             "tariff_type_code": tariff_type_code,
+            "tariff_name": tariff_name,
             "valid_from": r["__vf"],
             "valid_to": r["__vt"],
             "currency": "CHF",
@@ -776,11 +849,7 @@ def load_fees(conn):
         }
         rows.append(row)
 
-    # Bulk upsert in großen Batches, eine Transaktion für alles
     insert_fees_bulk(conn, rows, batch_size=5000)
-
-
-# ... existing code ...
 
 
 def _json_or_none(d: Optional[dict]) -> Optional[str]:
@@ -970,14 +1039,14 @@ def main():
     md = MetaData()
     with eng.begin() as conn:
         reflect(md, eng)
-
+        """
         seed_sources_and_datasets(conn)
 
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
         load_municipalities_and_regions(conn)
-
+        """
         load_fees(conn)
 
     print("✅ Load complete.")
