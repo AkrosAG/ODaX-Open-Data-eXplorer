@@ -19,3 +19,19 @@ SELECT * FROM public.sources ORDER BY source_id DESC LIMIT 5;
 postgresql+psycopg2://postgres:odax123@host.docker.internal:5433/odax_test
 oder auch 
 postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test
+
+
+# Issues with podman and postgres
+If, e.g., the postgres password needs to be changed, several steps may be required that this change takes effect.
+podman ps -a
+1. Container stoppen und löschen
+
+podman stop <container-name>
+podman rm <container-name>
+
+2. Volume-Namen ermitteln (aus deinem Setup-Skript)
+podman volume ls
+podman volume rm <volume-name>
+
+3. Container neu aufsetzen
+./deployment/database/setup_*.sh
