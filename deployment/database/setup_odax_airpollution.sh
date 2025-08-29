@@ -42,7 +42,6 @@ POSTGRES_DB="$(clean_val "$(get_env_strict POSTGRES_DB)")"
 POSTGRES_DB="${POSTGRES_DB:-odax_test}"
 
 # Prefer HOST_PORT_HEALTH, else HOST_PORT, else 5433
-HOST_PORT="$(clean_val "$(get_env_strict HOST_PORT)")"
 HOST_PORT="${HOST_PORT:-$(clean_val "$(get_env_strict HOST_PORT)")}"
 HOST_PORT="${HOST_PORT:-5433}"
 if ! [[ "$HOST_PORT" =~ ^[0-9]+$ ]]; then
@@ -53,6 +52,8 @@ fi
 VOLUME_NAME="$(clean_val "$(get_env_strict VOLUME_NAME)")"
 VOLUME_NAME="${VOLUME_NAME:-pgdata_odax}"
 
+AIR_SCHEMA="$(clean_val "$(get_env_strict AIR_SCHEMA)")"
+AIR_SCHEMA="${AIR_SCHEMA:-airq}"
 
 echo "📦 PostgreSQL mit Podman vorbereiten..."
 
@@ -83,9 +84,20 @@ podman run --name "$CONTAINER_NAME" \
 # Warte, bis PostgreSQL bereit ist
 echo "⏳ Warte 5 Sekunden auf PostgreSQL-Start..."
 sleep 5
+echo "📋 Erstelle Datenbankschema..."
+podman exec -i "$CONTAINER_NAME" psql -U postgres -d "$POSTGRES_DB" \
+  -v ON_ERROR_STOP=1 -v schema="$AIR_SCHEMA" <<'EOSQL'
+DO $do$
+BEGIN
+  -- psql ersetzt :'schema' zu einem SQL-String-Literal (z.B. 'airq')
+  EXECUTE format('CREATE SCHEMA IF NOT EXISTS "$AIR_SCHEMA"');
+END
+$do$;
 
-echo "📋 Erstelle Datenbankschema für Luftqualitätsdaten..."
-podman exec -i "$CONTAINER_NAME" psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'EOF'
+
+SELECT set_config('search_path', :'schema' || ', public', false);
+
+
 -- Allgemeine Metadaten-Tabellen (wiederverwendbar)
 CREATE TABLE IF NOT EXISTS sources (
   source_id        SERIAL PRIMARY KEY,
@@ -220,6 +232,6 @@ ON CONFLICT (code) DO UPDATE SET
   label = EXCLUDED.label,
   unit  = EXCLUDED.unit;
 
-EOF
+EOSQL
 
 echo "✅ PostgreSQL-Container '$CONTAINER_NAME' mit Luftqualitäts-Schema ist einsatzbereit!"
