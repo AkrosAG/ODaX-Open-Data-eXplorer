@@ -1,12 +1,55 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Konfiguration
-CONTAINER_NAME="odax-pg"
-POSTGRES_VERSION="15"
-POSTGRES_PASSWORD="odax123"
-POSTGRES_DB="odax_test"
-HOST_PORT="5433"
-VOLUME_NAME="pgdata_odax"
+# ── Paths ───────────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ENV_FILE="${ENV_FILE_OVERRIDE:-$ROOT_DIR/.env}"
+
+# Ensure .env exists
+if [ ! -f "$ENV_FILE" ]; then
+  echo "❌ .env not found at: $ENV_FILE"
+  exit 1
+fi
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+clean_val() {  # strip CR (Windows) + trim
+  printf '%s' "$1" | tr -d '\r' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+# Read a single var strictly from .env in a CLEAN environment (ignores current env)
+get_env_strict() {
+  local name="$1"
+  /usr/bin/env -i bash -c 'set -a; source "$1" 2>/dev/null; eval "printf %s \"\${'"$name"':-}\""' _ "$ENV_FILE"
+}
+
+# ── REQUIRED: POSTGRES_PASSWORD must be in .env ────────────────────────────────
+POSTGRES_PASSWORD="$(clean_val "$(get_env_strict POSTGRES_PASSWORD)")"
+if [ -z "$POSTGRES_PASSWORD" ]; then
+  echo "❌ POSTGRES_PASSWORD must be set (non-empty) in $ENV_FILE"
+  exit 1
+fi
+
+# ── Optional vars: read from .env (only), with sensible defaults ──────────────
+POSTGRES_VERSION="$(clean_val "$(get_env_strict POSTGRES_VERSION)")"
+POSTGRES_VERSION="${POSTGRES_VERSION:-15}"
+
+CONTAINER_NAME="$(clean_val "$(get_env_strict CONTAINER_NAME)")"
+CONTAINER_NAME="${CONTAINER_NAME:-odax-pg}"
+
+POSTGRES_DB="$(clean_val "$(get_env_strict POSTGRES_DB)")"
+POSTGRES_DB="${POSTGRES_DB:-odax_test}"
+
+# Prefer HOST_PORT_HEALTH, else HOST_PORT, else 5433
+HOST_PORT="${HOST_PORT:-$(clean_val "$(get_env_strict HOST_PORT)")}"
+HOST_PORT="${HOST_PORT:-5433}"
+if ! [[ "$HOST_PORT" =~ ^[0-9]+$ ]]; then
+  echo "⚠️ Ungültiger Portwert '$HOST_PORT'. Fallback auf 5433."
+  HOST_PORT=5433
+fi
+
+VOLUME_NAME="$(clean_val "$(get_env_strict VOLUME_NAME)")"
+VOLUME_NAME="${VOLUME_NAME:-pgdata_odax}"
 
 echo "📦 PostgreSQL mit Podman vorbereiten..."
 
@@ -119,6 +162,7 @@ CREATE TABLE IF NOT EXISTS fees (
   accident_included  BOOLEAN NOT NULL,
   franchise_amount   INTEGER NOT NULL REFERENCES franchises(amount) ON DELETE RESTRICT,
   tariff_type_code   TEXT NOT NULL REFERENCES tariff_types(code) ON DELETE RESTRICT,
+  tariff_name        TEXT NOT NULL,
   valid_from         DATE NOT NULL DEFAULT DATE '1900-01-01',
   valid_to           DATE,
   currency           CHAR(3) NOT NULL DEFAULT 'CHF',
@@ -126,8 +170,6 @@ CREATE TABLE IF NOT EXISTS fees (
   dataset_id         INT REFERENCES datasets(dataset_id) ON DELETE SET NULL,
   raw_source_metadata JSONB
 );
-
-
 
 
 BEGIN;
@@ -143,13 +185,22 @@ BEGIN
     ALTER TABLE public.fees
     ADD CONSTRAINT ux_fees_dedup UNIQUE (
       insurer_bag, canton_code, fee_region_id,
-      age_class_code, age_subgroup_code_nnz, accident_included,
-      franchise_amount, tariff_type_code, valid_from
+      age_class_code, age_subgroup_code, accident_included,
+      franchise_amount, tariff_type_code, valid_from, tariff_name
     );
   END IF;
 END $$;
 COMMIT;
 
+
+
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_fees_lookup
+  ON fees (canton_code, fee_region_id, age_class_code, accident_included, franchise_amount, tariff_type_code, tariff_name);
+
+CREATE INDEX IF NOT EXISTS idx_fees_insurer
+  ON fees (insurer_bag);
 
 EOF
 
