@@ -52,8 +52,6 @@ fi
 VOLUME_NAME="$(clean_val "$(get_env_strict VOLUME_NAME)")"
 VOLUME_NAME="${VOLUME_NAME:-pgdata_odax}"
 
-AIR_SCHEMA="$(clean_val "$(get_env_strict AIR_SCHEMA)")"
-AIR_SCHEMA="${AIR_SCHEMA:-airq}"
 
 echo "📦 PostgreSQL mit Podman vorbereiten..."
 
@@ -86,11 +84,11 @@ echo "⏳ Warte 5 Sekunden auf PostgreSQL-Start..."
 sleep 5
 echo "📋 Erstelle Datenbankschema..."
 podman exec -i "$CONTAINER_NAME" psql -U postgres -d "$POSTGRES_DB" \
-  -v ON_ERROR_STOP=1 -v schema="$AIR_SCHEMA" <<'EOSQL'
+  -v ON_ERROR_STOP=1 -v schema="airq" <<'EOSQL'
 DO $do$
 BEGIN
   -- psql ersetzt :'schema' zu einem SQL-String-Literal (z.B. 'airq')
-  EXECUTE format('CREATE SCHEMA IF NOT EXISTS "$AIR_SCHEMA"');
+  EXECUTE format('CREATE SCHEMA IF NOT EXISTS airq');
 END
 $do$;
 

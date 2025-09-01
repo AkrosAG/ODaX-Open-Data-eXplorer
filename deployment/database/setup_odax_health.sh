@@ -51,6 +51,7 @@ fi
 VOLUME_NAME="$(clean_val "$(get_env_strict VOLUME_NAME)")"
 VOLUME_NAME="${VOLUME_NAME:-pgdata_odax}"
 
+
 echo "📦 PostgreSQL mit Podman vorbereiten..."
 
 # Volume erstellen (falls nicht vorhanden)
@@ -87,7 +88,21 @@ sleep 5
 # Führe das SQL-Schema über podman exec + psql aus
 
 echo "📋 Erstelle Datenbankschema..."
-podman exec -i "$CONTAINER_NAME" psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'EOF'
+
+
+podman exec -i "$CONTAINER_NAME" psql -U postgres -d "$POSTGRES_DB" \
+  -v ON_ERROR_STOP=1 -v schema="health" <<'EOSQL'
+DO $do$
+BEGIN
+  -- psql ersetzt :'schema' zu einem SQL-String-Literal (z.B. 'airq')
+  EXECUTE format('CREATE SCHEMA IF NOT EXISTS health');
+END
+$do$;
+
+
+SELECT set_config('search_path', :'schema' || ', public', false);
+
+
 CREATE TABLE IF NOT EXISTS sources (
   source_id        SERIAL PRIMARY KEY,
   name             TEXT NOT NULL,
@@ -202,7 +217,7 @@ CREATE INDEX IF NOT EXISTS idx_fees_lookup
 CREATE INDEX IF NOT EXISTS idx_fees_insurer
   ON fees (insurer_bag);
 
-EOF
+EOSQL
 
 
 echo "✅ PostgreSQL-Container '$CONTAINER_NAME' mit Schema ist einsatzbereit!"
