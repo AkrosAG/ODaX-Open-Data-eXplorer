@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS fees (
 );
 
 
+
 BEGIN;
 DO $$
 BEGIN
@@ -194,10 +195,10 @@ BEGIN
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.fees'::regclass
+    WHERE conrelid = 'health.fees'::regclass
       AND conname = 'ux_fees_dedup'
   ) THEN
-    ALTER TABLE public.fees
+    ALTER TABLE health.fees
     ADD CONSTRAINT ux_fees_dedup UNIQUE (
       insurer_bag, canton_code, fee_region_id,
       age_class_code, age_subgroup_code, accident_included,
