@@ -205,3 +205,4 @@ Notes
 - IDE: In PyCharm, set the interpreter to the Poetry venv (poetry env info --path) or to venv/bin/python if you created it manually.
 - Dev dependencies: pytest and flake8 are installed only if you include the dev group (use --with dev). For a slimmer runtime-only env, omit --with dev.
 - Common checks: poetry check (validates pyproject), poetry lock (updates lockfile), poetry run pytest (runs tests).
+
