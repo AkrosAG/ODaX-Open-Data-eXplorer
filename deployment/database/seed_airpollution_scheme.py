@@ -1,4 +1,3 @@
-# seed_air_quality.py
 import os
 import sys
 import csv
@@ -6,10 +5,17 @@ import json
 import unicodedata
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple, List
-
+from dotenv import load_dotenv
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+load_dotenv()
+
+
+
+HOST_PORT = os.getenv("HOST_PORT")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_DB = os.getenv("POSTGRES_DB")
 
 # ------------------------------------------------------------------------------
 # Konfiguration
@@ -17,7 +23,7 @@ from sqlalchemy.engine import Engine
 # Standard: lokaler Podman-Container aus dem Schema-Setup
 PG_URL = os.environ.get(
     "PG_URL_AIR",
-    "postgresql+psycopg2://postgres:odax123@localhost:5443/odax_air",
+    f"postgresql+psycopg2://postgres:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
 )
 
 # Daten-Dateien
@@ -77,7 +83,7 @@ def get_or_create_source(
     raw_source_metadata: Optional[dict] = None,
 ) -> int:
     row = conn.execute(
-        text("SELECT source_id FROM public.sources WHERE name=:n LIMIT 1"),
+        text("SELECT source_id FROM airq.sources WHERE name=:n LIMIT 1"),
         {"n": name},
     ).first()
     if row:
@@ -85,7 +91,7 @@ def get_or_create_source(
     row = conn.execute(
         text(
             """
-            INSERT INTO public.sources (name, description, url, license, raw_source_metadata)
+            INSERT INTO airq.sources (name, description, url, license, raw_source_metadata)
             VALUES (:name, :description, :url, :license, CAST(:raw_meta AS JSONB))
             RETURNING source_id
         """
@@ -113,7 +119,7 @@ def get_or_create_dataset(
     metadata: Optional[dict] = None,
 ) -> int:
     row = conn.execute(
-        text("SELECT dataset_id FROM public.datasets WHERE name=:n LIMIT 1"),
+        text("SELECT dataset_id FROM airq.datasets WHERE name=:n LIMIT 1"),
         {"n": name},
     ).first()
     if row:
@@ -121,7 +127,7 @@ def get_or_create_dataset(
     row = conn.execute(
         text(
             """
-            INSERT INTO public.datasets
+            INSERT INTO airq.datasets
               (source_id, name, description, access_url, update_timestamp, metadata)
             VALUES
               (:source_id, :name, :description, :access_url, :update_ts, CAST(:meta AS JSONB))
@@ -148,7 +154,7 @@ def ensure_pollutants(conn, items: List[Tuple[str, str, str]]):
         conn.execute(
             text(
                 """
-                INSERT INTO public.pollutants (code, label, unit)
+                INSERT INTO airq.pollutants (code, label, unit)
                 VALUES (:c, :l, :u)
                 ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, unit=EXCLUDED.unit
             """
@@ -223,7 +229,7 @@ def load_stations(conn) -> Dict[str, int]:
         row = conn.execute(
             text(
                 """
-                INSERT INTO public.stations (external_id, short_code, name, lv95_easting, lv95_northing, elevation_m, location_type, remarks)
+                INSERT INTO airq.stations (external_id, short_code, name, lv95_easting, lv95_northing, elevation_m, location_type, remarks)
                 VALUES (:eid, :sc, :nm, :e, :n, :el, :lt, :rm)
                 ON CONFLICT (external_id) DO UPDATE SET
                   short_code=EXCLUDED.short_code,
@@ -330,14 +336,14 @@ def upsert_measurements_bulk(
         "raw_source_metadata",
     ]
     sql = f"""
-        INSERT INTO public.station_measurements ({', '.join(cols)})
+        INSERT INTO airq.station_measurements ({', '.join(cols)})
         VALUES %s
         ON CONFLICT (station_id, pollutant_code, ts_utc)
         DO UPDATE SET
           value = EXCLUDED.value,
           unit = EXCLUDED.unit,
-          dataset_id = COALESCE(EXCLUDED.dataset_id, public.station_measurements.dataset_id),
-          raw_source_metadata = COALESCE(EXCLUDED.raw_source_metadata, public.station_measurements.raw_source_metadata)
+          dataset_id = COALESCE(EXCLUDED.dataset_id, airq.station_measurements.dataset_id),
+          raw_source_metadata = COALESCE(EXCLUDED.raw_source_metadata, airq.station_measurements.raw_source_metadata)
     """
 
     def adapt_row(r):

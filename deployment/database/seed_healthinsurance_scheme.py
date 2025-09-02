@@ -9,14 +9,24 @@ from sqlalchemy.engine import Engine
 import unicodedata
 import hashlib
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 
 from imping.healthinsurance.lib_healthinsurance import (
     GetMunicipalities_PerCanton,
     GetMunicipalities_MultipleFeeRegions,
 )
 
+load_dotenv()
+
+HOST_PORT = os.getenv("HOST_PORT")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_DB = os.getenv("POSTGRES_DB")
+
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
-PG_URL = "postgresql+psycopg2://postgres:odax123@localhost:5433/odax_test"
+PG_URL = os.environ.get(
+    "PG_URL_AIR",
+    f"postgresql+psycopg2://postgres:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
+)
 
 # Input files
 # Determine project root relative to this file to avoid relying on CWD during debug runs
@@ -67,7 +77,7 @@ def engine() -> Engine:
 
 def reflect(md: MetaData, eng: Engine):
     md.clear()
-    md.reflect(eng, schema="public")
+    md.reflect(eng, schema="health")
 
 
 # Idempotent upsert helpers (PostgreSQL)
@@ -75,7 +85,7 @@ def upsert_canton(conn, code: str, name: str):
     conn.execute(
         text(
             """
-        INSERT INTO public.cantons (canton_code, name)
+        INSERT INTO health.cantons (canton_code, name)
         VALUES (:code, :name)
         ON CONFLICT (canton_code) DO UPDATE SET name = EXCLUDED.name;
     """
@@ -89,7 +99,7 @@ def upsert_fee_region(conn, canton_code: str, region_no: int) -> int:
     row = conn.execute(
         text(
             """
-        INSERT INTO public.fee_regions (canton_code, region_no)
+        INSERT INTO health.fee_regions (canton_code, region_no)
         VALUES (:c, :r)
         ON CONFLICT (canton_code, region_no) DO UPDATE SET region_no = EXCLUDED.region_no
         RETURNING fee_region_id;
@@ -103,7 +113,7 @@ def upsert_fee_region(conn, canton_code: str, region_no: int) -> int:
     return conn.execute(
         text(
             """
-        SELECT fee_region_id FROM public.fee_regions
+        SELECT fee_region_id FROM health.fee_regions
         WHERE canton_code=:c AND region_no=:r
     """
         ),
@@ -117,9 +127,9 @@ def upsert_municipality(
     row = conn.execute(
         text(
             """
-        INSERT INTO public.municipalities (name, canton_code, fee_region_id)
+        INSERT INTO health.municipalities (name, canton_code, fee_region_id)
         VALUES (:n, :c, :f)
-        ON CONFLICT (name, canton_code) DO UPDATE SET fee_region_id = COALESCE(EXCLUDED.fee_region_id, public.municipalities.fee_region_id)
+        ON CONFLICT (name, canton_code) DO UPDATE SET fee_region_id = COALESCE(EXCLUDED.fee_region_id, health.municipalities.fee_region_id)
         RETURNING municipality_id;
     """
         ),
@@ -130,7 +140,7 @@ def upsert_municipality(
     return conn.execute(
         text(
             """
-        SELECT municipality_id FROM public.municipalities
+        SELECT municipality_id FROM health.municipalities
         WHERE name=:n AND canton_code=:c
     """
         ),
@@ -142,7 +152,7 @@ def upsert_insurer(conn, bag_number: int, name: str):
     conn.execute(
         text(
             """
-        INSERT INTO public.insurers (bag_number, name)
+        INSERT INTO health.insurers (bag_number, name)
         VALUES (:b, :n)
         ON CONFLICT (bag_number) DO UPDATE SET name = EXCLUDED.name;
     """
@@ -157,7 +167,7 @@ def upsert_lookup(conn, table: str, pkcol: str, code: str, label: Optional[str] 
     conn.execute(
         text(
             f"""
-        INSERT INTO public.{table} ({pkcol}, label)
+        INSERT INTO health.{table} ({pkcol}, label)
         VALUES (:c, :l)
         ON CONFLICT ({pkcol}) DO UPDATE SET label = EXCLUDED.label;
     """
@@ -170,7 +180,7 @@ def upsert_franchise(conn, amount: int):
     conn.execute(
         text(
             """
-        INSERT INTO public.franchises (amount)
+        INSERT INTO health.franchises (amount)
         VALUES (:a)
         ON CONFLICT (amount) DO NOTHING;
     """
@@ -184,7 +194,7 @@ def insert_fee(conn, row):
     conn.execute(
         text(
             """
-        INSERT INTO public.fees (
+        INSERT INTO health.fees (
           insurer_bag, canton_code, fee_region_id,
           age_class_code, age_subgroup_code, accident_included,
           franchise_amount, tariff_type_code, valid_from, valid_to,
@@ -198,7 +208,7 @@ def insert_fee(conn, row):
         ON CONFLICT ON CONSTRAINT ux_fees_dedup
         DO UPDATE SET
           monthly_premium     = EXCLUDED.monthly_premium,
-          raw_source_metadata = COALESCE(EXCLUDED.raw_source_metadata, public.fees.raw_source_metadata);
+          raw_source_metadata = COALESCE(EXCLUDED.raw_source_metadata, health.fees.raw_source_metadata);
     """
         ),
         row,
@@ -238,7 +248,7 @@ def insert_fees_bulk(conn, rows, batch_size: int = 5000):
 
     # KORREKT: execute_values erwartet genau ein %s, das durch die komplette VALUES-Liste ersetzt wird.
     sql = (
-        f"INSERT INTO public.fees ({', '.join(cols)}) VALUES %s ON CONFLICT DO NOTHING"
+        f"INSERT INTO health.fees ({', '.join(cols)}) VALUES %s ON CONFLICT DO NOTHING"
     )
 
     def row_tuple(r):
@@ -307,7 +317,7 @@ def fill_fee_regions(conn, df):
     Erwartet df mit vektorisiert gesetzten Spalten:
       df["Kanton"] -> bereits normalisiert (z.B. "ZH", "NW", ...)
       df["Region"] -> bereits als Zahl (Int64) extrahiert
-    Schreibt (canton_code, region_no) in public.fee_regions (ON CONFLICT DO NOTHING)
+    Schreibt (canton_code, region_no) in health.fee_regions (ON CONFLICT DO NOTHING)
     und liefert ein Mapping {(canton_code, region_no): fee_region_id}.
     """
 
@@ -328,7 +338,7 @@ def fill_fee_regions(conn, df):
     conn.execute(
         text(
             """
-            INSERT INTO public.fee_regions (canton_code, region_no)
+            INSERT INTO health.fee_regions (canton_code, region_no)
             VALUES (:canton_code, :region_no)
             ON CONFLICT (canton_code, region_no) DO NOTHING
         """
@@ -350,7 +360,7 @@ def fill_fee_regions(conn, df):
 
         sql = f"""
             SELECT fr.fee_region_id, fr.canton_code, fr.region_no
-            FROM public.fee_regions fr
+            FROM health.fee_regions fr
             JOIN (VALUES {", ".join(values_sql)}) AS v(canton_code, region_no)
               ON fr.canton_code = v.canton_code AND fr.region_no = v.region_no
         """
@@ -436,10 +446,10 @@ def load_municipalities_and_regions(conn):
     conn.execute(
         text(
             """
-             INSERT INTO public.municipalities (name, canton_code, fee_region_id)
+             INSERT INTO health.municipalities (name, canton_code, fee_region_id)
              VALUES (:name, :canton_code, :fee_region_id) ON CONFLICT (name, canton_code) DO
              UPDATE
-                 SET fee_region_id = COALESCE (EXCLUDED.fee_region_id, public.municipalities.fee_region_id)
+                 SET fee_region_id = COALESCE (EXCLUDED.fee_region_id, health.municipalities.fee_region_id)
              """
         ),
         [
@@ -514,7 +524,7 @@ def seed_lookups(conn):
         conn.execute(
             text(
                 """
-            INSERT INTO public.age_subgroups (code, label, age_class_code)
+            INSERT INTO health.age_subgroups (code, label, age_class_code)
             VALUES (:c,:l,:p)
             ON CONFLICT (code) DO UPDATE SET label=EXCLUDED.label, age_class_code=EXCLUDED.age_class_code;
         """
@@ -560,7 +570,7 @@ def ensure_age_subgroup(conn, code: str | None) -> str | None:
         conn.execute(
             text(
                 """
-            INSERT INTO public.age_subgroups (code, label, age_class_code)
+            INSERT INTO health.age_subgroups (code, label, age_class_code)
             VALUES (:c, :l, 'AKL-KIN')
             ON CONFLICT (code) DO UPDATE SET label = EXCLUDED.label, age_class_code = EXCLUDED.age_class_code;
         """
@@ -570,7 +580,7 @@ def ensure_age_subgroup(conn, code: str | None) -> str | None:
         return c
     # Keep as-is only if it already exists
     exists = conn.execute(
-        text("SELECT 1 FROM public.age_subgroups WHERE code=:c"), {"c": c}
+        text("SELECT 1 FROM health.age_subgroups WHERE code=:c"), {"c": c}
     ).first()
     return c if exists else None
 
@@ -584,7 +594,7 @@ def get_municipality_ids(
         text(
             """
             SELECT municipality_id
-            FROM public.municipalities
+            FROM health.municipalities
             WHERE fee_region_id = :f
               AND canton_code = :c
             """
@@ -599,7 +609,7 @@ def get_municipality_ids(
 def load_table_as_df(
     conn,
     table: str,
-    schema: str = "public",
+    schema: str = "health",
     columns: Optional[Sequence[str]] = None,
     where: Optional[str] = None,
     params: Optional[dict] = None,
@@ -610,7 +620,7 @@ def load_table_as_df(
     Args:
         conn: SQLAlchemy Connection oder Engine.
         table: Tabellenname (ohne Schema).
-        schema: Schema-Name (Default: "public").
+        schema: Schema-Name (Default: "health").
         columns: Optionale Liste der Spaltennamen. Wenn None -> "*".
         where: Optionaler WHERE-Teil ohne das Wort "WHERE" (z.B. 'id > :min_id').
         params: Bind-Parameter für das WHERE (z.B. {'min_id': 10}).
@@ -641,7 +651,7 @@ def load_fees(conn):
         text(
             """
             SELECT dataset_id
-            FROM public.datasets
+            FROM health.datasets
             WHERE access_url = :a OR name = :n
             ORDER BY dataset_id DESC
             LIMIT 1
@@ -739,7 +749,7 @@ def load_fees(conn):
         conn.execute(
             text(
                 """
-                INSERT INTO public.age_subgroups (code, label, age_class_code)
+                INSERT INTO health.age_subgroups (code, label, age_class_code)
                 SELECT x.code, ('Kinder ' || x.code), 'AKL-KIN'
                 FROM (VALUES """
                 + ", ".join([f"(:c{i})" for i in range(len(need_sub))])
@@ -765,7 +775,7 @@ def load_fees(conn):
         conn.execute(
             text(
                 f"""
-                INSERT INTO public.fee_regions (canton_code, region_no)
+                INSERT INTO health.fee_regions (canton_code, region_no)
                 VALUES {", ".join(values_sql)}
                 ON CONFLICT (canton_code, region_no) DO NOTHING
             """
@@ -784,7 +794,7 @@ def load_fees(conn):
             text(
                 f"""
                 SELECT fr.canton_code, fr.region_no, fr.fee_region_id
-                FROM public.fee_regions fr
+                FROM health.fee_regions fr
                 JOIN (VALUES {", ".join(values_sql)}) AS v(canton_code, region_no)
                   ON fr.canton_code = v.canton_code AND fr.region_no = v.region_no
             """
@@ -875,7 +885,7 @@ def get_or_create_dataset(
     row = conn.execute(
         text(
             """
-            INSERT INTO public.datasets
+            INSERT INTO health.datasets
               (source_id, name, description, access_url, update_timestamp, metadata)
             VALUES
               (:source_id, :name, :description, :access_url, :update_ts, CAST(:meta AS JSONB))
@@ -896,7 +906,7 @@ def get_or_create_dataset(
 
 def _select_id_by_name(conn, table: str, id_col: str, name: str) -> Optional[int]:
     row = conn.execute(
-        text(f"SELECT {id_col} FROM public.{table} WHERE name = :n LIMIT 1"),
+        text(f"SELECT {id_col} FROM health.{table} WHERE name = :n LIMIT 1"),
         {"n": name},
     ).first()
     return int(row[0]) if row else None
@@ -920,7 +930,7 @@ def get_or_create_source(
     row = conn.execute(
         text(
             """
-            INSERT INTO public.sources (name, description, url, license, raw_source_metadata)
+            INSERT INTO health.sources (name, description, url, license, raw_source_metadata)
             VALUES (:name, :description, :url, :license, CAST(:raw_meta AS JSONB))
             RETURNING source_id;
             """
