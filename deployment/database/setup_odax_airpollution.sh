@@ -138,23 +138,10 @@ CREATE TABLE IF NOT EXISTS stations (
   elevation_m      NUMERIC(8,2),
   location_type    TEXT,                     -- z.B. 'Städtisch', 'Ländlich', ...
   remarks          TEXT,
+  dataset_id       INT REFERENCES datasets(dataset_id) ON DELETE SET NULL,
   metadata         JSONB
 );
 
--- Optionale Verknüpfung Station <-> Dataset (z.B. Herkunft aus STAC)
-CREATE TABLE IF NOT EXISTS station_assets (
-  station_asset_id  SERIAL PRIMARY KEY,
-  station_id        INT NOT NULL REFERENCES stations(station_id) ON DELETE CASCADE,
-  dataset_id        INT REFERENCES datasets(dataset_id) ON DELETE SET NULL,
-  asset_name        TEXT NOT NULL,       -- z.B. Dateiname, Asset-Key aus STAC
-  access_url        TEXT,                -- Download-URL
-  checksum          TEXT,
-  file_size_bytes   BIGINT,
-  mime_type         TEXT,
-  time_range        TSRANGE,             -- optionaler Zeitraum, den das Asset abdeckt
-  metadata          JSONB,
-  UNIQUE (station_id, asset_name)
-);
 
 -- Zeitreihen-Messungen je Station/Schadstoff/Zeitpunkt
 -- Werte können unterschiedlichste Einheiten haben; die Normalisierung kann separat passieren.
@@ -198,37 +185,6 @@ CREATE INDEX IF NOT EXISTS ix_station_daily_station_date
   ON station_daily (station_id, date_utc);
 CREATE INDEX IF NOT EXISTS ix_station_daily_pollutant_date
   ON station_daily (pollutant_code, date_utc);
-
--- Beispiel-View: Letzter Messwert je Station/Schadstoff
-CREATE OR REPLACE VIEW vw_latest_station_values AS
-SELECT DISTINCT ON (m.station_id, m.pollutant_code)
-  m.station_id,
-  m.pollutant_code,
-  m.ts_utc,
-  m.value,
-  m.unit,
-  m.dataset_id
-FROM station_measurements m
-ORDER BY m.station_id, m.pollutant_code, m.ts_utc DESC;
-
--- Beispiel-View: Stations-Metadaten kompakt
-CREATE OR REPLACE VIEW vw_stations_compact AS
-SELECT
-  s.station_id, s.external_id, s.short_code, s.name,
-  s.canton_code, s.wgs84_lat, s.wgs84_lon, s.elevation_m, s.location_type
-FROM stations s;
-
--- Ein paar gängige Schadstoff-Codes vorbesetzen (idempotent)
-INSERT INTO pollutants (code, label, unit)
-VALUES
- ('CO',  'Kohlenmonoxid', 'mg/m3'),
- ('NO2', 'Stickstoffdioxid', 'µg/m3'),
- ('PM10','Feinstaub PM10',  'µg/m3'),
- ('PM2_5','Feinstaub PM2.5','µg/m3'),
- ('O3',  'Ozon',            'µg/m3')
-ON CONFLICT (code) DO UPDATE SET
-  label = EXCLUDED.label,
-  unit  = EXCLUDED.unit;
 
 EOSQL
 
