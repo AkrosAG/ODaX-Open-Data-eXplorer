@@ -10,8 +10,9 @@ authors = [
 readme = "README.md"
 packages = [{include = "imping"}]
 
+
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "3.11"
 python-dotenv = ">=1.1.0,<2.0.0"
 requests = ">=2.32.4,<3.0.0"
 pandas = ">=2.0.3,<3.0.0"
@@ -27,9 +28,12 @@ loguru = "^0.7.3"
 pillow = "^11.3.0"
 marshmallow = "<4"
 psycopg2 = "^2.9.10"
+sqlalchemy = ">=2.0.0,<3.0.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.4.1,<9.0.0"
+flake8 = ">=7.3.0,<8.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
-
