@@ -16,6 +16,22 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 2) As you have previously installed wsl and restarted the computer, there should be an Ubuntu terminal based on wsl available in your Pycharm. If so, please open this terminal. If not, please check your wsl installation.
 3) You can check with ```pwd``` if the selected directory in your Ubuntu terminal session is ```/home/{USER}```. If not, navigate there and perform the following steps.
 
+## Usage of python version 3.11
+1) some libraries or modules such as psycopg2 work only with python version 3.11 and not higher python versions, so this should be set
+2) activate poetry environment
+poetry env use 3.11
+poetry install --with dev
+poetry shell
+3) In case build is failing:
+sudo apt update && sudo apt install -y libpq-dev python3.11-dev build-essential
+poetry install
+4) Verify:
+python -c "import psycopg2, sys; print(psycopg2.**version**, sys.executable)"
+5) Alternatively:
+poetry add psycopg2-binary hint: for production normal psycopg2 is superior, the binary for local testing 
+6) Special case Superset/Docker
+If the error occurs inside a separate Superset instance (container): the package must be installed in the container. In your own Superset environment, you need to install psycopg2 (or psycopg2-binary) in that environment accordingly.
+   
 ## Installation of ODaX
 1) Clone the repository https://github.com/AkrosAG/ODaX-Open-Data-eXplorer via git in the wsl filesystem, e.g., under ```/home/{USER}```.
 2) Checkout the branch ```develop```.
@@ -115,4 +131,5 @@ Modules for importing and processing air quality data:
 
 ### Jupyter Notebooks
 - `airquality_healthinsurancefees.ipynb`: Interactive notebook version of the analysis script for exploring the relationship between air quality and health insurance fees
+
 
