@@ -1049,14 +1049,14 @@ def main():
     md = MetaData()
     with eng.begin() as conn:
         reflect(md, eng)
-        """
+
         seed_sources_and_datasets(conn)
 
         load_cantons(conn)
         seed_lookups(conn)
         load_insurers(conn)
         load_municipalities_and_regions(conn)
-        """
+
         load_fees(conn)
 
     print("✅ Load complete.")
