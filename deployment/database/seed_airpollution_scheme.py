@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-load_dotenv()
 
+load_dotenv()
 
 
 HOST_PORT = os.getenv("HOST_PORT")

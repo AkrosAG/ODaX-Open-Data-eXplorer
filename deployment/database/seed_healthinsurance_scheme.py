@@ -350,7 +350,7 @@ def fill_fee_regions(conn, df):
     mapping = {}
     CHUNK = 1000
     for i in range(0, len(rows), CHUNK):
-        chunk = rows[i: i + CHUNK]
+        chunk = rows[i : i + CHUNK]
         values_sql = []
         params = {}
         for j, (c, r) in enumerate(chunk):
