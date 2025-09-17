@@ -21,15 +21,16 @@ dash = ">=3.1.1,<4.0.0"
 jupyterlab = ">=4.4.4,<5.0.0"
 openpyxl = ">=3.1.5,<4.0.0"
 apache-superset = ">=5.0.0,<6.0.0"
-pytest = ">=8.4.1,<9.0.0"
-flake8 = ">=7.3.0,<8.0.0"
 loguru = "^0.7.3"
 pillow = "^11.3.0"
 marshmallow = "<4"
 psycopg2 = "^2.9.10"
+sqlalchemy = ">=1.4,<2"
 
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.4.1,<9.0.0"
+flake8 = ">=7.3.0,<8.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
-
