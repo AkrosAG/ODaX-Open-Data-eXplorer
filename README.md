@@ -153,9 +153,9 @@ The Professional version of Pycharm offers the functionality to visualize the st
 ```
 ip addr show eth0
 ```
-2) Open the Database action in Pycharm and select ```New``` and click on ````Data Source````next. Then, select ````PostgreSQL``` and again ````PostgreSQL```.
+2) Open the Database action in Pycharm and select ```New``` and click on ```Data Source``` next. Then, select ```PostgreSQL``` and again ```PostgreSQL```.
 3) In the configuration insert the previously determined ip address as a host.
-3) Fill the postgres port, user and password defined in your  ```.env``` file.
+3) Fill the postgres port and password defined in your  ```.env``` file. The use ist ```postgres```.
 3) The URL is a connection string like ```jdbc:postgresql://{IP}:{PORT}/{DATABASE}``` where {IP} is the previously determined ip address, {PORT} is the port defined in the ```.env``` file, and {DATABASE} is also defined in the ```.env``` file.
 4) Test the connection by clicking on ```Test connection```. If the connection is fine, click on ```OK```.
 5) Refresh the connections to load and visualize the content of your containers databases.
