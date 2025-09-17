@@ -149,7 +149,7 @@ python deployment/database/seed_healthinsurance_scheme.py
 
 ## Database verification in Pycharm
 The Professional version of Pycharm offers the functionality to visualize the structure and content of a database.
-1) Determin your internal WSL ip address via the command:
+1) Determine your internal WSL ip address via the command:
 ```
 ip addr show eth0
 ```
