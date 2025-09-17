@@ -21,7 +21,7 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 2) Checkout the branch ```develop```.
 3) Delete the folder ```.vitualenvs``` in ```/home/{USER}``` if it exists.
 4) Navigate to the root directory of your project ```/home/{USER}/ODaX-Open-Data-eXplorer```.
-5) Create a virtual environment via ```python3.11 -m venv venv```. At the moment, apache superset requries python 3.11.
+5) Create a virtual environment via ```python3.11 -m venv venv```. At the moment, apache superset requires python 3.11.
 6) If step 4 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
 7) Using ```wsl```, activate the virtual environment by ```source venv/bin/activate```.
 8) Update pip via ```pip install --upgrade pip```
@@ -159,3 +159,12 @@ ip addr show eth0
 3) The URL is a connection string like ```jdbc:postgresql://{IP}:{PORT}/{DATABASE}``` where {IP} is the previously determined ip address, {PORT} is the port defined in the ```.env``` file, and {DATABASE} is also defined in the ```.env``` file.
 4) Test the connection by clicking on ```Test connection```. If the connection is fine, click on ```OK```.
 5) Refresh the connections to load and visualize the content of your containers databases.
+
+
+## Superset visualization
+1) When using WSL, you need set value of the environment variable ```FLASK_APP``` to ```superset``` to tell flask which application to start. 
+```export FLASK_APP=superset```
+2) When executing ```superset run```, the error ```Refusing to start due to insecure SECRET_KEY``` is shown, please execute the following to fix it:
+3) Create a file, e.g., ```superset_config.py```  and add a ```SECRET_KEY=""``` with a secure key.
+4) Set the path to the superset_config.py with the SECRET_KEY via ```export SUPERSET_CONFIG_PATH={PATH_TO_SUPERSET_CONFIG_PY}```.
+5) Run ```superset run ``` and login to the superset dashboard with the standard credentials ```admin``` as user and password.
