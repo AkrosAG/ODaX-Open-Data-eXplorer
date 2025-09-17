@@ -116,3 +116,46 @@ Modules for importing and processing air quality data:
 ### Jupyter Notebooks
 - `airquality_healthinsurancefees.ipynb`: Interactive notebook version of the analysis script for exploring the relationship between air quality and health insurance fees
 
+## Database setup and seeding
+
+1) To the existing .env file, please add the following lines and choose a password for postgres.
+```
+CONTAINER_NAME="odax-pg"
+POSTGRES_VERSION="15"
+POSTGRES_PASSWORD="{PASSWORD}"
+POSTGRES_DB="odax_test"
+HOST_PORT="5433"
+VOLUME_NAME="pgdata_odax"
+```
+
+2) Next, create the database setup by executing the following from the root directory:
+```
+./deployment/database/setup_odax_health.sh
+./deployment/database/setup_odax_airq.sh
+```
+
+In case, you get an error about the encoding used, follow these steps:
+```
+sudo apt-get update && sudo apt-get install -y dos2unix
+dos2unix deployment/database/setup_odax_health.sh
+dos2unix deployment/database/setup_odax_airq.sh
+```
+
+3) Next, seed the database by executing the following scripts within your virtual environment:
+```
+python deployment/database/seed_airpollution_scheme.py
+python deployment/database/seed_healthinsurance_scheme.py
+```
+
+## Database verification in Pycharm
+The Professional version of Pycharm offers the functionality to visualize the structure and content of a database.
+1) Determin your internal WSL ip address via the command:
+```
+ip addr show eth0
+```
+2) Open the Database action in Pycharm and select ```New``` and click on ````Data Source````next. Then, select ````PostgreSQL``` and again ````PostgreSQL```.
+3) In the configuration insert the previously determined ip address as a host.
+3) Fill the postgres port, user and password defined in your  ```.env``` file.
+3) The URL is a connection string like ```jdbc:postgresql://{IP}:{PORT}/{DATABASE}``` where {IP} is the previously determined ip address, {PORT} is the port defined in the ```.env``` file, and {DATABASE} is also defined in the ```.env``` file.
+4) Test the connection by clicking on ```Test connection```. If the connection is fine, click on ```OK```.
+5) Refresh the connections to load and visualize the content of your containers databases.
