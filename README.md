@@ -21,7 +21,7 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 2) Checkout the branch ```develop```.
 3) Delete the folder ```.vitualenvs``` in ```/home/{USER}``` if it exists.
 4) Navigate to the root directory of your project ```/home/{USER}/ODaX-Open-Data-eXplorer```.
-5) Create a virtual environment via ```python3.11 -m venv venv```. At the moment, apache superset requries python 3.11.
+5) Create a virtual environment via ```python3.11 -m venv venv```. At the moment, apache superset requires python 3.11.
 6) If step 4 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
 7) Using ```wsl```, activate the virtual environment by ```source venv/bin/activate```.
 8) Update pip via ```pip install --upgrade pip```
@@ -116,6 +116,18 @@ Modules for importing and processing air quality data:
 ### Jupyter Notebooks
 - `airquality_healthinsurancefees.ipynb`: Interactive notebook version of the analysis script for exploring the relationship between air quality and health insurance fees
 
+## Superset visualization
+1) Add the configuration to the ```.env``` file and set the SUPERSET_ADMIN_PASSWORD to a custom one of your choice:
+```
+SUPERSET_PORT=8088
+SUPERSET_SECRET_KEY=q2l3r6YHD0l8C6p7xzFh4WyiU6k7uHs1y+V5rQ0CgLg=
+SUPERSET_ADMIN_USERNAME=admin
+SUPERSET_ADMIN_PASSWORD={PASSWORD}
+SUPERSET_ADMIN_EMAIL=admin@example.com
+SUPERSET_CONTAINER_NAME=odax-superset
+```
+2) By following the set setup 2) in "Database setup and seeding", you also create a superset instance in your podman container.
+
 ## Database setup and seeding
 
 1) To the existing .env file, please add the following lines and choose a password for postgres.
@@ -131,14 +143,14 @@ VOLUME_NAME="pgdata_odax"
 2) Next, create the database setup by executing the following from the root directory:
 ```
 ./deployment/database/setup_odax_health.sh
-./deployment/database/setup_odax_airq.sh
+./deployment/database/setup_odax_airpollution.sh
 ```
 
 In case, you get an error about the encoding used, follow these steps:
 ```
 sudo apt-get update && sudo apt-get install -y dos2unix
 dos2unix deployment/database/setup_odax_health.sh
-dos2unix deployment/database/setup_odax_airq.sh
+dos2unix deployment/database/setup_odax_airpollution.sh
 ```
 
 3) Next, seed the database by executing the following scripts within your virtual environment:
@@ -159,3 +171,4 @@ ip addr show eth0
 3) The URL is a connection string like ```jdbc:postgresql://{IP}:{PORT}/{DATABASE}``` where {IP} is the previously determined ip address, {PORT} is the port defined in the ```.env``` file, and {DATABASE} is also defined in the ```.env``` file.
 4) Test the connection by clicking on ```Test connection```. If the connection is fine, click on ```OK```.
 5) Refresh the connections to load and visualize the content of your containers databases.
+
