@@ -79,6 +79,113 @@ podman run --name "$CONTAINER_NAME" \
   -p "$HOST_PORT":5432 \
   -d docker.io/library/postgres:"$POSTGRES_VERSION"
 
+# ── Superset config ────────────────────────────────────────────────────────────
+SUPERSET_CONTAINER_NAME="$(clean_val "$(get_env_strict SUPERSET_CONTAINER_NAME)")"
+SUPERSET_CONTAINER_NAME="${SUPERSET_CONTAINER_NAME:-odax-superset}"
+
+SUPERSET_PORT="$(clean_val "$(get_env_strict SUPERSET_PORT)")"
+SUPERSET_PORT="${SUPERSET_PORT:-8088}"
+
+POSTGRES_USER="$(clean_val "$(get_env_strict POSTGRES_USER)")"
+POSTGRES_USER="${POSTGRES_USER:-postgres}"
+
+NETWORK_NAME="$(clean_val "$(get_env_strict NETWORK_NAME)")"
+NETWORK_NAME="${NETWORK_NAME:-odax-net}"
+
+SUPERSET_SECRET_KEY="$(clean_val "$(get_env_strict SUPERSET_SECRET_KEY)")"
+if [ -z "$SUPERSET_SECRET_KEY" ]; then
+  echo "🔑 Generiere zufälligen SUPERSET_SECRET_KEY (für Tests)…"
+  SUPERSET_SECRET_KEY="$(python3 - <<'PY'
+import secrets, string
+alphabet = string.ascii_letters + string.digits
+print(''.join(secrets.choice(alphabet) for _ in range(64)))
+PY
+)"
+fi
+
+SUPERSET_ADMIN_USERNAME="$(clean_val "$(get_env_strict SUPERSET_ADMIN_USERNAME)")"
+SUPERSET_ADMIN_USERNAME="${SUPERSET_ADMIN_USERNAME:-admin}"
+
+SUPERSET_ADMIN_PASSWORD="$(clean_val "$(get_env_strict SUPERSET_ADMIN_PASSWORD)")"
+if [ -z "$SUPERSET_ADMIN_PASSWORD" ]; then
+  echo "❌ SUPERSET_ADMIN_PASSWORD must be set (non-empty) in $ENV_FILE"
+  exit 1
+fi
+SUPERSET_ADMIN_EMAIL="$(clean_val "$(get_env_strict SUPERSET_ADMIN_EMAIL)")"
+SUPERSET_ADMIN_EMAIL="${SUPERSET_ADMIN_EMAIL:-admin@example.com}"
+
+# ── Network (so Superset can reach Postgres by container name) ────────────────
+if ! podman network exists "$NETWORK_NAME"; then
+  echo "🔧 Creating network: $NETWORK_NAME"
+  podman network create "$NETWORK_NAME"
+else
+  echo "✔️ Network $NETWORK_NAME already exists"
+fi
+
+# Re-run Postgres with network if needed
+echo "🔗 Ensuring Postgres '$CONTAINER_NAME' is on $NETWORK_NAME"
+if podman container exists "$CONTAINER_NAME"; then
+  podman inspect "$CONTAINER_NAME" | grep -q "\"$NETWORK_NAME\"" || {
+    echo "↻ Restarting Postgres on $NETWORK_NAME"
+    podman stop "$CONTAINER_NAME" || true
+    podman rm "$CONTAINER_NAME" || true
+    podman run --name "$CONTAINER_NAME" \
+      --network "$NETWORK_NAME" \
+      -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+      -e POSTGRES_DB="$POSTGRES_DB" \
+      -e POSTGRES_USER="$POSTGRES_USER" \
+      -v "$VOLUME_NAME":/var/lib/postgresql/data \
+      -p "$HOST_PORT":5432 \
+      -d docker.io/library/postgres:"$POSTGRES_VERSION"
+    echo "⏳ Waiting 5s for Postgres…"; sleep 5
+  }
+else
+  echo "❌ Expected Postgres container '$CONTAINER_NAME' to exist"
+  exit 1
+fi
+
+# ── Start Superset ────────────────────────────────────────────────────────────
+# DB URI for Superset metadata -> use the Postgres container name as host:
+SUPERMETA_URI="postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${CONTAINER_NAME}:5432/${POSTGRES_DB}"
+
+# Remove old Superset container if present
+if podman container exists "$SUPERSET_CONTAINER_NAME"; then
+  echo "🛑 Stop & remove old Superset…"
+  podman stop "$SUPERSET_CONTAINER_NAME" || true
+  podman rm "$SUPERSET_CONTAINER_NAME" || true
+fi
+
+echo "🚀 Starting Superset container: $SUPERSET_CONTAINER_NAME"
+podman run --name "$SUPERSET_CONTAINER_NAME" \
+  --network "$NETWORK_NAME" \
+  -e SUPERSET_SECRET_KEY="$SUPERSET_SECRET_KEY" \
+  -e SQLALCHEMY_DATABASE_URI="$SUPERMETA_URI" \
+  -p "$SUPERSET_PORT":8088 \
+  -d docker.io/apache/superset:latest-py311
+
+echo "⏳ Waiting 10s for Superset container to boot…"
+sleep 10
+podman exec $SUPERSET_CONTAINER_NAME pip install --upgrade pip
+podman exec $SUPERSET_CONTAINER_NAME pip install --no-cache-dir pillow
+
+
+# ── Initialize Superset & create admin ────────────────────────────────────────
+echo "🗃️  Applying DB migrations…"
+podman exec "$SUPERSET_CONTAINER_NAME" superset db upgrade
+
+echo "👤 Creating admin user…"
+podman exec "$SUPERSET_CONTAINER_NAME" superset fab create-admin \
+  --username "$SUPERSET_ADMIN_USERNAME" \
+  --firstname Admin --lastname User \
+  --email "$SUPERSET_ADMIN_EMAIL" \
+  --password "$SUPERSET_ADMIN_PASSWORD"
+
+echo "🔧 Finalizing init…"
+podman exec "$SUPERSET_CONTAINER_NAME" superset init
+
+echo "✅ Superset up at http://localhost:${SUPERSET_PORT}"
+
+
 # Warte, bis PostgreSQL bereit ist
 echo "⏳ Warte 5 Sekunden auf PostgreSQL-Start..."
 sleep 5

@@ -116,6 +116,18 @@ Modules for importing and processing air quality data:
 ### Jupyter Notebooks
 - `airquality_healthinsurancefees.ipynb`: Interactive notebook version of the analysis script for exploring the relationship between air quality and health insurance fees
 
+## Superset visualization
+1) Add the configuration to the ```.env``` file and set the SUPERSET_ADMIN_PASSWORD to a custom one of your choice:
+```
+SUPERSET_PORT=8088
+SUPERSET_SECRET_KEY=q2l3r6YHD0l8C6p7xzFh4WyiU6k7uHs1y+V5rQ0CgLg=
+SUPERSET_ADMIN_USERNAME=admin
+SUPERSET_ADMIN_PASSWORD={PASSWORD}
+SUPERSET_ADMIN_EMAIL=admin@example.com
+SUPERSET_CONTAINER_NAME=odax-superset
+```
+2) By following the set setup 2) in "Database setup and seeding", you also create a superset instance in your podman container.
+
 ## Database setup and seeding
 
 1) To the existing .env file, please add the following lines and choose a password for postgres.
@@ -160,11 +172,3 @@ ip addr show eth0
 4) Test the connection by clicking on ```Test connection```. If the connection is fine, click on ```OK```.
 5) Refresh the connections to load and visualize the content of your containers databases.
 
-
-## Superset visualization
-1) When using WSL, you need set value of the environment variable ```FLASK_APP``` to ```superset``` to tell flask which application to start. 
-```export FLASK_APP=superset```
-2) When executing ```superset run```, the error ```Refusing to start due to insecure SECRET_KEY``` is shown, please execute the following to fix it:
-3) Create a file, e.g., ```superset_config.py```  and add a ```SECRET_KEY=""``` with a secure key.
-4) Set the path to the superset_config.py with the SECRET_KEY via ```export SUPERSET_CONFIG_PATH={PATH_TO_SUPERSET_CONFIG_PY}```.
-5) Run ```superset run ``` and login to the superset dashboard with the standard credentials ```admin``` as user and password.
