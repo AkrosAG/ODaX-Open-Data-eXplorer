@@ -143,14 +143,14 @@ VOLUME_NAME="pgdata_odax"
 2) Next, create the database setup by executing the following from the root directory:
 ```
 ./deployment/database/setup_odax_health.sh
-./deployment/database/setup_odax_airq.sh
+./deployment/database/setup_odax_airpollution.sh
 ```
 
 In case, you get an error about the encoding used, follow these steps:
 ```
 sudo apt-get update && sudo apt-get install -y dos2unix
 dos2unix deployment/database/setup_odax_health.sh
-dos2unix deployment/database/setup_odax_airq.sh
+dos2unix deployment/database/setup_odax_airpollution.sh
 ```
 
 3) Next, seed the database by executing the following scripts within your virtual environment:
