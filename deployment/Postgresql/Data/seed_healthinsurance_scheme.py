@@ -21,16 +21,17 @@ load_dotenv()
 HOST_PORT = os.getenv("HOST_PORT")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = os.environ.get(
     "PG_URL_AIR",
-    f"postgresql+psycopg2://postgres:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
+    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
 )
 
 # Input files
 # Determine project root relative to this file to avoid relying on CWD during debug runs
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CSV_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.csv")
 XSLX_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.xlsx")
 

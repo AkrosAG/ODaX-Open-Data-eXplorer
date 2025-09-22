@@ -1,0 +1,10 @@
+networks:
+  odax_network:
+    driver: bridge
+    name: odax_network
+
+include:
+  - Superset/docker-compose.yml
+  - Postgresql/docker-compose.yml
+
+

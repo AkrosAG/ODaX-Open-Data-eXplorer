@@ -16,6 +16,7 @@ load_dotenv()
 HOST_PORT = os.getenv("HOST_PORT")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
 
 # ------------------------------------------------------------------------------
 # Konfiguration
@@ -23,11 +24,11 @@ POSTGRES_DB = os.getenv("POSTGRES_DB")
 # Standard: lokaler Podman-Container aus dem Schema-Setup
 PG_URL = os.environ.get(
     "PG_URL_AIR",
-    f"postgresql+psycopg2://postgres:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
+    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
 )
 
 # Daten-Dateien
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", ".."))
 DATA_DIR = os.path.join(BASE, "data")
 
 PATH_STATIONS = os.path.join(DATA_DIR, "nabel", "stations.csv")
