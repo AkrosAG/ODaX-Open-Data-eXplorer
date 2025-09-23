@@ -29,7 +29,7 @@ PG_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_H
 
 # Input files
 # Determine project root relative to this file to avoid relying on CWD during debug runs
-BASE = "/app/raw_data/healthinsurance/"
+BASE = "/app/data/healthinsurance/"
 CSV_FEES = os.path.join(BASE,"Prämien_CH.csv")
 XSLX_FEES = os.path.join(BASE, "Prämien_CH.xlsx")
 

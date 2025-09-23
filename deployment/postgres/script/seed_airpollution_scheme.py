@@ -26,7 +26,7 @@ POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 PG_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 print(PG_URL)
 # Daten-Dateien
-BASE = "/app/raw_data/nabel/"
+BASE = "/app/data/nabel/"
 
 PATH_STATIONS = os.path.join(BASE,"stations.csv")
 
