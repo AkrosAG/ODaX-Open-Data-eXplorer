@@ -37,8 +37,11 @@ services:
     command:
       sh -c "
       apt-get update && apt-get install -y postgresql-client &&
+      pip install --no-cache-dir -r /app/requirements.txt &&
       psql -h postgres -U postgres_user -d postgres_db -f /app/initialize_airpollution_scheme.sql &&
-      psql -h postgres -U postgres_user -d postgres_db -f /app/initialize_healthinsurance_scheme.sql 
+      psql -h postgres -U postgres_user -d postgres_db -f /app/initialize_healthinsurance_scheme.sql  &&
+      python /app/seed_airpollution_scheme.py &&
+      python /app/seed_healthinsurance_scheme.py
       "
     depends_on:
       postgres:
