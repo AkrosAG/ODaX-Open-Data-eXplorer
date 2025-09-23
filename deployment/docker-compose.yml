@@ -4,7 +4,7 @@ networks:
     name: odax_network
 
 include:
-  - Superset/docker-compose.yml
-  - Postgresql/docker-compose.yml
+  - superset/docker_compose.yml
+  - postgres/docker_compose.yml
 
 

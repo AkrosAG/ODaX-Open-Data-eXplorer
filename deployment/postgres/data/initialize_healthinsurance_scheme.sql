@@ -1,6 +1,6 @@
 Create schema if not exists health;
 
-SELECT set_config('search_path', 'health,public', false);
+SELECT set_config('search_path', 'health', false);
 
 
 CREATE TABLE IF NOT EXISTS sources (

@@ -11,8 +11,8 @@ services:
       POSTGRES_DB: "postgres_db"
     command: ["postgres", "-c", "wal_level=logical"]
     volumes:
-      - ./Data/initialize_airpollution.sql:/docker-entrypoint-initdb.d/initialize_airpollution.sql
-      - ./Data/initialize_health.sql:/docker-entrypoint-initdb.d/initialize_health.sql
+      - ./data/initialize_airpollution_scheme.sql:/docker-entrypoint-initdb.d/initialize_airpollution_scheme.sql
+      - ./data/initialize_healthinsurance_scheme.sql:/docker-entrypoint-initdb.d/initialize_healthinsurance_scheme.sql
       - ./superset/sql/superset_init.sql:/docker-entrypoint-initdb.d/03_superset_init.sql
 
     networks:
