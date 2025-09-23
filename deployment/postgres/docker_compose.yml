@@ -10,11 +10,6 @@ services:
       POSTGRES_PASSWORD: "postgres_password"
       POSTGRES_DB: "postgres_db"
     command: ["postgres", "-c", "wal_level=logical"]
-    volumes:
-      - ./data/initialize_airpollution_scheme.sql:/docker-entrypoint-initdb.d/initialize_airpollution_scheme.sql
-      - ./data/initialize_healthinsurance_scheme.sql:/docker-entrypoint-initdb.d/initialize_healthinsurance_scheme.sql
-      - ./superset/sql/superset_init.sql:/docker-entrypoint-initdb.d/03_superset_init.sql
-
     networks:
       odax_network:
     healthcheck:
@@ -23,3 +18,28 @@ services:
       timeout: 5s
       retries: 24
 
+  bootstrap:
+    image: python:3.11-slim
+    container_name: bootstrap
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: "postgres_user"
+      POSTGRES_PASSWORD: "postgres_password"
+      POSTGRES_DB: "postgres_db"
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+    volumes:
+      - ./data:/app
+    working_dir: /app
+
+    networks:
+      odax_network:
+    command:
+      sh -c "
+      apt-get update && apt-get install -y postgresql-client &&
+      psql -h postgres -U postgres_user -d postgres_db -f /app/initialize_airpollution_scheme.sql &&
+      psql -h postgres -U postgres_user -d postgres_db -f /app/initialize_healthinsurance_scheme.sql 
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy

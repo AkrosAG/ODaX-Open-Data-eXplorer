@@ -22,23 +22,23 @@ HOST_PORT = os.getenv("HOST_PORT")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
 POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────────
 PG_URL = os.environ.get(
     "PG_URL_AIR",
-    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
+    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{HOST_PORT}/{POSTGRES_DB}",
 )
 
 # Input files
 # Determine project root relative to this file to avoid relying on CWD during debug runs
 BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-CSV_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.csv")
-XSLX_FEES = os.path.join(BASE, "data", "healthinsurance", "Prämien_CH.xlsx")
+print(BASE)
+CSV_FEES = os.path.join("raw_data_healthinsurance","Prämien_CH.csv")
+XSLX_FEES = os.path.join("raw_data_healthinsurance", "Prämien_CH.xlsx")
 
-XLS_MUNIC = os.path.join(
-    BASE, "data", "healthinsurance", "praemienregionen-ab-2025.xlsx"
-)
-XLS_INSURERS = os.path.join(BASE, "data", "healthinsurance", "BagNr_Mapping_KV.xlsx")
+XLS_MUNIC = os.path.join("raw_data_healthinsurance","praemienregionen-ab-2025.xlsx")
+XLS_INSURERS = os.path.join("raw_data_healthinsurance","BagNr_Mapping_KV.xlsx")
 
 # Canton dictionary (from your notebook)
 swiss_cantons_abbr_to_name = {

@@ -24,7 +24,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER")
 # Standard: lokaler Podman-Container aus dem Schema-Setup
 PG_URL = os.environ.get(
     "PG_URL_AIR",
-    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
+    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{localhost}:{HOST_PORT}/{POSTGRES_DB}",
 )
 
 # Daten-Dateien
