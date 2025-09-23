@@ -6,5 +6,6 @@ networks:
 include:
   - superset/docker_compose.yml
   - postgres/docker_compose.yml
+  - pgadmin/docker_compose.yml
 
 

@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Odax PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres_db",
+      "Username": "postgres_user",
+      "Password": "postgres_password",
+      "SSLMode": "prefer",
+      "Favorite": true
+    }
+  }
+}
