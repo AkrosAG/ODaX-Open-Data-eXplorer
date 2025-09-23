@@ -12,6 +12,6 @@ services:
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
     volumes:
       - /var/lib/pgadmin
-      - ./servers.json:/pgadmin4/servers.json
+      - ./data/servers.json:/pgadmin4/servers.json
     networks:
       - odax_network
