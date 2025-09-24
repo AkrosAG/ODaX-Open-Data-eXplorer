@@ -106,7 +106,7 @@ def test_parse_coords_invalid(east, north):
 
 
 def test_get_wgs84_municipality_found(monkeypatch):
-    from imping.nabel_airquality import lib_geocoordinates as geo
+    from deployment.postgres.script.imping.nabel_airquality import lib_geocoordinates as geo
 
     payload = {
         "results": [
