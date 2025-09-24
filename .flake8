@@ -1,6 +1,6 @@
 [flake8]
 max-line-length = 500
 max-complexity = 10
-extend-ignore = E402 C901 E203
+extend-ignore = E402 C901 E203 W291
 statistics = True
 count = True

@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ✅ update this import path if your module lives elsewhere
-from imping.nabel_airquality.lib_openweathermap import get_air_quality
+from deployment.postgres.script.imping.nabel_airquality.lib_openweathermap import get_air_quality
 
 
 def test_get_air_quality_success():
@@ -31,7 +31,7 @@ def test_get_air_quality_success():
         ],
     }
 
-    with patch("imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
+    with patch("deployment.postgres.script.imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         resp.json.return_value = fake_payload
@@ -53,7 +53,7 @@ def test_get_air_quality_success():
 def test_get_air_quality_http_error_returns_none():
     lat, lon, key = 46.0, 7.0, "TEST_KEY"
 
-    with patch("imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
+    with patch("deployment.postgres.script.imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
         resp = MagicMock()
         from requests.exceptions import HTTPError
 
@@ -69,7 +69,7 @@ def test_get_air_quality_request_exception_returns_none():
 
     from requests.exceptions import RequestException
 
-    with patch("imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
+    with patch("deployment.postgres.script.imping.nabel_airquality.lib_openweathermap.requests.get") as mock_get:
         mock_get.side_effect = RequestException("network is down")
 
         result = get_air_quality(lat, lon, key)

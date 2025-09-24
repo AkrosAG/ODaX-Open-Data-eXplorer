@@ -1,0 +1,12 @@
+# Superset core dependencies
+psycopg2-binary==2.9.9
+flask-cors==4.0.0
+
+# Trino integration with compatible versions
+trino==0.335.0
+# sqlalchemy-trino==0.4.0
+sqlalchemy==1.4.53
+
+# Additional dependencies that might be needed
+redis==5.0.1
+celery==5.3.4 

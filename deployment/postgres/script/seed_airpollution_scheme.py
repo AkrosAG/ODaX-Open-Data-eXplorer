@@ -13,28 +13,25 @@ from sqlalchemy.engine import Engine
 load_dotenv()
 
 
-HOST_PORT = os.getenv("HOST_PORT")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 
 # ------------------------------------------------------------------------------
 # Konfiguration
 # ------------------------------------------------------------------------------
 # Standard: lokaler Podman-Container aus dem Schema-Setup
-PG_URL = os.environ.get(
-    "PG_URL_AIR",
-    f"postgresql+psycopg2://postgres:{POSTGRES_PASSWORD}@localhost:{HOST_PORT}/{POSTGRES_DB}",
-)
-
+PG_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+print(PG_URL)
 # Daten-Dateien
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DATA_DIR = os.path.join(BASE, "data")
+BASE = "/app/data/nabel/"
 
-PATH_STATIONS = os.path.join(DATA_DIR, "nabel", "stations.csv")
-PATH_CO = os.path.join(
-    DATA_DIR, "nabel", "historical_data", "CO.csv"
-)  # Tagesmittelwerte CO
+PATH_STATIONS = os.path.join(BASE, "stations.csv")
 
+# Tagesmittelwerte CO
+PATH_CO = os.path.join(BASE, "historical_data/CO.csv")
 # Optional: Source-/Dataset-Metadaten (frei anpassbar)
 SOURCE_NAME = "MeteoSwiss / NABEL / geo.admin.ch"
 DATASET_NAME_CO = "CO Tagesmittelwerte (NABEL)"
@@ -480,6 +477,7 @@ def main():
 
 
 if __name__ == "__main__":
+    print("now")
     try:
         main()
     except Exception as e:
