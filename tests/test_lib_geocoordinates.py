@@ -10,7 +10,7 @@ import requests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ⬇️ change this import to your actual module path/file name
-from imping.nabel_airquality.lib_geocoordinates import (
+from deployment.postgres.script.imping.nabel_airquality.lib_geocoordinates import (
     swiss_lv95_to_wgs84,
     parse_coords,
     get_wgs84_municipality,

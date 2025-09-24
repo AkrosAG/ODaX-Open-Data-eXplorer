@@ -7,7 +7,7 @@ import os
 # Add the parent directory to sys.path to import the module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from imping.healthinsurance.lib_healthinsurance import (
+from deployment.postgres.script.imping.healthinsurance.lib_healthinsurance import (
     LoadData,
     GetRegion,
     GetMunicipalities_MultipleFeeRegions,
