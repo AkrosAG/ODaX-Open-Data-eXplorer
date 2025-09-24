@@ -28,10 +28,10 @@ print(PG_URL)
 # Daten-Dateien
 BASE = "/app/data/nabel/"
 
-PATH_STATIONS = os.path.join(BASE,"stations.csv")
+PATH_STATIONS = os.path.join(BASE, "stations.csv")
 
 # Tagesmittelwerte CO
-PATH_CO = os.path.join(BASE,"historical_data/CO.csv")
+PATH_CO = os.path.join(BASE, "historical_data/CO.csv")
 # Optional: Source-/Dataset-Metadaten (frei anpassbar)
 SOURCE_NAME = "MeteoSwiss / NABEL / geo.admin.ch"
 DATASET_NAME_CO = "CO Tagesmittelwerte (NABEL)"
@@ -477,7 +477,7 @@ def main():
 
 
 if __name__ == "__main__":
-    print('now')
+    print("now")
     try:
         main()
     except Exception as e:

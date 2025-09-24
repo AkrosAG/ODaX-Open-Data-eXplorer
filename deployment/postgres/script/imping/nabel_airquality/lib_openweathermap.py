@@ -59,6 +59,8 @@ def get_air_quality(
         data = response.json()
         return data
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching data from OpenWeatherMap for ({latitude}, {longitude}): {e}")
+        logger.error(
+            f"Error fetching data from OpenWeatherMap for ({latitude}, {longitude}): {e}"
+        )
         # If you want stack trace for debugging, replace with: logger.exception(...)
         return None
