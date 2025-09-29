@@ -57,4 +57,3 @@ def test_output(output, *args) -> None:
 
     for col in required_columns:
         assert col in output.columns, f'Column {col} is missing from output'
-
