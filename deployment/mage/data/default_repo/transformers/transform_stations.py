@@ -52,8 +52,8 @@ def test_output(output, *args) -> None:
     assert len(output) > 0, 'The output DataFrame is empty'
     
     # Check that coordinate columns exist
-    required_columns = ['title', 'code', 'lv95_easting', 'lv95_northing', 
-                      'wgs84_lat', 'wgs84_lon', 'elevation', 'location_type']
+    required_columns = ['title', 'code', 'lv95_easting', 'lv95_northing',
+                        'wgs84_lat', 'wgs84_lon', 'elevation', 'location_type']
     
     for col in required_columns:
         assert col in output.columns, f'Column {col} is missing from output'

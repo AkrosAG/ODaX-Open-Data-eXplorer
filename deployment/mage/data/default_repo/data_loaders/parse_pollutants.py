@@ -16,7 +16,7 @@ def load_data_from_file(*args, **kwargs):
     try:
         # Path to historical data directory
         DATA_DIR = '/home/src/raw_data/nabel/historical_data/'
-        
+
         # Get all CSV files
         csv_files = glob.glob(os.path.join(DATA_DIR, '*.csv'))
         
