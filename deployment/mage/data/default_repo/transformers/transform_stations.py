@@ -1,4 +1,3 @@
-import unicodedata
 from pyproj import Transformer
 
 if 'transformer' not in globals():
@@ -26,11 +25,7 @@ def transform(data, *args, **kwargs):
     # Rename columns
     data = data.rename(columns=rename_map)
 
-    # Normalize station names: remove accents, replace hyphens, and convert to uppercase
     data['title'] = data['title'].str.strip()  # Remove leading/trailing whitespace
-    # data['title'] = data['title'].apply(strip_accents)  # Remove accents using NFKD
-    # data['title'] = data['title'].str.replace('-', ' ', regex=False)  # Replace hyphens with spaces
-    # data['title'] = data['title'].str.upper()  # Convert to uppercase
 
     # Create transformer from LV95 (EPSG:2056) to WGS84 (EPSG:4326)
     coord_transformer = Transformer.from_crs('EPSG:2056', 'EPSG:4326', always_xy=True)
@@ -58,20 +53,8 @@ def test_output(output, *args) -> None:
     
     # Check that coordinate columns exist
     required_columns = ['title', 'code', 'lv95_easting', 'lv95_northing', 
-                       'wgs84_lat', 'wgs84_lon', 'elevation', 'location_type']
+                      'wgs84_lat', 'wgs84_lon', 'elevation', 'location_type']
     
     for col in required_columns:
         assert col in output.columns, f'Column {col} is missing from output'
     
-    # Check coordinate ranges for Switzerland
-    # Switzerland latitude range: ~45.8° to 47.8°
-    # Switzerland longitude range: ~5.9° to 10.5°
-
-
-# def strip_accents(s: str) -> str:
-#     """Remove accents and diacritical marks from string using NFKD normalization"""
-#     if s is None:
-#         return s
-#     return "".join(
-#         c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
-#     )

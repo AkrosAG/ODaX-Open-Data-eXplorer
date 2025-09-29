@@ -1,5 +1,3 @@
-import pandas as pd
-import os
 from mage_ai.settings.repo import get_repo_path
 from mage_ai.io.config import ConfigFileLoader
 from mage_ai.io.postgres import Postgres

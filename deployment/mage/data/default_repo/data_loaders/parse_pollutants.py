@@ -1,7 +1,6 @@
 import pandas as pd
 import os
 import glob
-from pathlib import Path
 
 if 'data_loader' not in globals():
     from mage_ai.data_preparation.decorators import data_loader
@@ -70,7 +69,7 @@ def load_data_from_file(*args, **kwargs):
                 
                 # Skip if no data
                 if df.empty:
-                    print(f"  No data found in {pollutant}")
+                    print(f"  No data found in {pollutant_code}")
                     continue
                 
                 # Rename the first column to 'date' (it's usually 'Datum/Zeit')
@@ -112,7 +111,7 @@ def load_data_from_file(*args, **kwargs):
         # Combine all data
         combined_data = pd.concat(all_data, ignore_index=True)
         
-        print(f"\n=== FINAL DATASET ===")
+        print("\n=== FINAL DATASET ===")
         print(f"Total records: {len(combined_data)}")
         print(f"Date range: {combined_data['date'].min()} to {combined_data['date'].max()}")
         print(f"Pollutants: {sorted(combined_data['code'].unique())}")
@@ -125,7 +124,7 @@ def load_data_from_file(*args, **kwargs):
             print(f"{i:2d}. {station} ({station_count} records)")
         
         # Group by station example
-        print(f"\n=== SAMPLE: BERN-BOLLWERK DATA ===")
+        print("\n=== SAMPLE: BERN-BOLLWERK DATA ===")
         bern_data = combined_data[combined_data['station'].str.contains('Bern', case=False, na=False)]
         if not bern_data.empty:
             print(f"Bern records: {len(bern_data)}")

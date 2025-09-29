@@ -1,7 +1,6 @@
 from mage_ai.settings.repo import get_repo_path
 from mage_ai.io.config import ConfigFileLoader
 from mage_ai.io.postgres import Postgres
-from pandas import DataFrame
 from os import path
 
 if 'data_exporter' not in globals():
@@ -17,10 +16,9 @@ def export_data_to_postgres(pollutant_df, **kwargs) -> None:
     config_path = path.join(get_repo_path(), 'io_config.yaml')
     config_profile = 'postgres'
 
-
     # Extract unique pollutants with their code, title and unit
     pollutants_info = pollutant_df[['code', 'title', 'unit']].drop_duplicates()
-    print(f"\n=== UNIQUE POLLUTANTS TO INSERT ===")
+    print("\n=== UNIQUE POLLUTANTS TO INSERT ===")
     print(pollutants_info)
 
     with Postgres.with_config(ConfigFileLoader(config_path, config_profile)) as loader:

@@ -1,7 +1,6 @@
 from mage_ai.settings.repo import get_repo_path
 from mage_ai.io.config import ConfigFileLoader
 from mage_ai.io.postgres import Postgres
-from pandas import DataFrame
 from os import path
 
 if 'data_exporter' not in globals():
@@ -17,7 +16,7 @@ def export_data(df, *args, **kwargs):
     config_path = path.join(get_repo_path(), 'io_config.yaml')
     config_profile = 'postgres'
 
-    print(f"\n=== INSERTING POLLUTANT MEASUREMENTS ===")
+    print("\n=== INSERTING POLLUTANT MEASUREMENTS ===")
     print(f"Total records to insert: {len(df)}")
     print(f"Columns: {list(df.columns)}")
     print(f"Sample data:\n{df.head()}")
@@ -26,7 +25,7 @@ def export_data(df, *args, **kwargs):
         # Clear existing data
         loader.execute("TRUNCATE TABLE public.pollutant_measurement RESTART IDENTITY CASCADE;")
         print("Cleared existing pollutant measurements")
-        
+
         # Insert new data
         loader.export(
             df,
@@ -35,6 +34,5 @@ def export_data(df, *args, **kwargs):
             index=False,
             if_exists='append',
         )
-        
-        print(f" Successfully inserted {len(df)} pollutant measurements!")
 
+        print(f"Successfully inserted {len(df)} pollutant measurements!")
