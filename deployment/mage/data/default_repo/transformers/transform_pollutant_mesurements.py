@@ -21,16 +21,16 @@ def transform(stations_df, pollutants_df, pollutant_measurement_df, *args, **kwa
         """Remove accents and convert to uppercase"""
         if pd.isna(text):
             return text
-        # Normalize unicode (NFD = decomposed form) 
+        # Normalize unicode (NFD = decomposed form)
         normalized = unicodedata.normalize('NFD', str(text))
         # Remove accent marks (category 'Mn' = nonspacing marks)
         ascii_text = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
         return ascii_text.upper()
-    
+
     merged['station_normalized'] = merged['station'].apply(normalize_text)
     station_lookup = stations_df[['title', 'id']].drop_duplicates().rename(columns={'id': 'station_id'})
     station_lookup['title_normalized'] = station_lookup['title'].apply(normalize_text)
-    
+
     merged = merged.merge(station_lookup, left_on='station_normalized', right_on='title_normalized', how='left')
 
     # Rename columns to match database schema
@@ -38,7 +38,7 @@ def transform(stations_df, pollutants_df, pollutant_measurement_df, *args, **kwa
         merged = merged.rename(columns={'date': 'created_at'})
     if 'value' in merged.columns:
         merged = merged.rename(columns={'value': 'reading'})
-    
+
     # Convert ID columns to integers (they may be floats after merge)
     if 'pollutant_id' in merged.columns:
         merged['pollutant_id'] = merged['pollutant_id'].astype('Int64')  # nullable integer
