@@ -1,0 +1,9 @@
+project_uuid: 0dce02f73c3e43f2b0eed0345448600d
+features:
+  add_new_block_v2: true
+  automatic_kernel_cleanup: true
+help_improve_mage:
+pipelines:
+  settings:
+    triggers:
+      save_in_code_automatically: true

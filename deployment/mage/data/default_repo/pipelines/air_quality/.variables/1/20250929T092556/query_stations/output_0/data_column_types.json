@@ -1,0 +1,1 @@
+{"id": "int64", "code": "str", "title": "str", "lv95_easting": "float64", "lv95_northing": "float64", "wgs84_lon": "float64", "wgs84_lat": "float64", "elevation": "float64", "location_type": "str", "remarks": "str"}

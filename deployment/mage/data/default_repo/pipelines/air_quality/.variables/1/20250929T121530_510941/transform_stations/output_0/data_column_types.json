@@ -1,0 +1,1 @@
+{"title": "str", "code": "str", "lv95_easting": "int64", "lv95_northing": "int64", "elevation": "int64", "location_type": "str", "summary": "str", "wgs84_lat": "float64", "wgs84_lon": "float64"}

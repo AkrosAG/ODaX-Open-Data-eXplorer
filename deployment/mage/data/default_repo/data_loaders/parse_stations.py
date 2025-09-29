@@ -1,0 +1,23 @@
+import pandas as pd
+import os
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+@data_loader
+def load_data_from_file(*args, **kwargs):
+    """
+    Load NABEL monitoring stations
+    """
+    PATH_FILE = '/home/src/raw_data/nabel/stations.csv'
+    return pd.read_csv(PATH_FILE)
+
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Template code for testing the output of the block.
+    """
+    assert output is not None, 'The output is undefined'

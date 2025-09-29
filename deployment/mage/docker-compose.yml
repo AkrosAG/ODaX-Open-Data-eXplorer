@@ -1,0 +1,34 @@
+services:
+  mage:
+    # image: mageai/mageai:0.9.76
+    build: image
+    container_name: mage
+    ports:
+      - "6789:6789"
+    volumes:
+      - ./data:/home/src/
+      - ../../raw_data:/home/src/raw_data
+      # - ./conf/io_config.yaml:/home/src/default_repo/io_config.yaml
+    environment:
+      - MAGE_DATA_DIR=/home/src/
+      # Java and AWS configuration
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+
+    # Memory limits for the Mage AI container
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
+    restart: unless-stopped 
+    networks:
+      - odax_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6789" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5

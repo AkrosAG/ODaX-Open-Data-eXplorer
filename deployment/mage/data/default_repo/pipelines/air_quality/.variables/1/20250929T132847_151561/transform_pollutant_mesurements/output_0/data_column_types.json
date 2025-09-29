@@ -1,0 +1,1 @@
+{"created_at": "date", "reading": "float64", "pollutant_id": "Int64", "station_id": "Int64"}

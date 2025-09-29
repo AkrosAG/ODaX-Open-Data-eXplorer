@@ -1,0 +1,39 @@
+if 'transformer' not in globals():
+    from mage_ai.data_preparation.decorators import transformer
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+@transformer
+def transform(stations_df, pollutants_df, pollutant_measurement_df, *args, **kwargs):
+    """
+    Transform pollutant mesuarement readings in order to be persisted to database
+    """
+    # Add pollutant id
+    # df = pollutant_measurement_df.copy()
+    right = pollutants_df[[c for c in ['code', 'id'] if c in pollutants_df.columns]].drop_duplicates()
+    merged = pollutant_measurement_df.merge(right, on='code', how='left')
+    if 'id' in merged.columns:
+        merged = merged.rename(columns={'id': 'pollutant_id'})
+
+    # Add station id
+    # stations_lookup = stations_df[[c for c in ['title', 'id'] if c in stations_df.columns]].drop_duplicates()
+    # merged = merged.merge(stations_lookup, left_on='station', how='left')
+    # if 'id' in merged.columns:
+    #     merged = merged.rename(columns={'id': 'station_id'})
+
+
+    # Drop source descriptive columns if present
+    cols_to_drop = [c for c in ['code', 'title', 'unit', 'station'] if c in merged.columns]
+    if cols_to_drop:
+        merged = merged.drop(columns=cols_to_drop)
+
+    return merged
+
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Template code for testing the output of the block.
+    """
+    assert output is not None, 'The output is undefined'

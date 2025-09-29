@@ -1,0 +1,73 @@
+-- \c postgres_db
+
+-- CREATE SCHEMA IF NOT EXISTS public;
+
+
+CREATE TABLE IF NOT EXISTS source (
+  source_id        SERIAL PRIMARY KEY,
+  name             TEXT NOT NULL,
+  description      TEXT,
+  url              TEXT,
+  license          TEXT,
+  raw_source_metadata JSONB
+);
+
+CREATE TABLE IF NOT EXISTS dataset (
+  dataset_id       SERIAL PRIMARY KEY,
+  source_id        INT NOT NULL REFERENCES source(source_id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  description      TEXT,
+  access_url       TEXT,
+  update_timestamp TIMESTAMP,
+  metadata         JSONB
+);
+
+CREATE TABLE IF NOT EXISTS pollutant (
+  code        TEXT PRIMARY KEY,      -- z.B. 'CO','NO2','PM10','PM2_5','O3'
+  label       TEXT,                  -- lesbarer Name
+  unit        TEXT,                  -- Standard-Einheit, z.B. 'µg/m3' oder 'mg/m3'
+  metadata    JSONB
+);
+
+CREATE TABLE IF NOT EXISTS station (
+  station_id       SERIAL PRIMARY KEY,
+  -- external_id      TEXT UNIQUE,            
+  short_code       TEXT,
+  name             TEXT NOT NULL,
+  canton_code      CHAR(2),
+  lv95_easting     NUMERIC(12,3),            -- EPSG:2056
+  lv95_northing    NUMERIC(12,3),            -- EPSG:2056
+  wgs84_lon        DOUBLE PRECISION,         -- EPSG:4326
+  wgs84_lat        DOUBLE PRECISION,         -- EPSG:4326
+  elevation        NUMERIC(8,2),
+  location_type    TEXT,                     -- z.B. 'Städtisch', 'Ländlich', ...
+  remarks          TEXT
+  -- dataset_id       INT REFERENCES dataset(dataset_id) ON DELETE SET NULL,
+  -- metadata         JSONB
+);
+
+
+CREATE TABLE IF NOT EXISTS station_measurement (
+  measurement_id    BIGSERIAL PRIMARY KEY,
+  station_id        INT NOT NULL REFERENCES station(station_id) ON DELETE CASCADE,
+  pollutant_code    TEXT NOT NULL REFERENCES pollutant(code) ON DELETE RESTRICT,
+  ts_utc            TIMESTAMPTZ NOT NULL, -- Messzeitpunkt in UTC
+  value             DOUBLE PRECISION,     -- Messwert
+  unit              TEXT,                 -- Einheit des konkreten Datensatzes
+  quality_flag      TEXT,                 -- optional: Qualität/Validität
+  dataset_id        INT REFERENCES dataset(dataset_id) ON DELETE SET NULL,
+  raw_source_metadata JSONB,
+  -- Eindeutige Messung je Station/Schadstoff/Zeitpunkt (idempotent importierbar)
+  UNIQUE (station_id, pollutant_code, ts_utc)
+);
+
+
+CREATE INDEX IF NOT EXISTS ix_station_measurement_station_ts
+  ON station_measurement (station_id, ts_utc);
+CREATE INDEX IF NOT EXISTS ix_station_measurement_pollutant_ts
+  ON station_measurement (pollutant_code, ts_utc);
+CREATE INDEX IF NOT EXISTS ix_station_measurement_ts
+  ON station_measurement (ts_utc);
+
+
+

@@ -1,0 +1,33 @@
+if 'transformer' not in globals():
+    from mage_ai.data_preparation.decorators import transformer
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+@transformer
+def transform(data, *args, **kwargs):
+    """
+    Transform the station data by renaming columns to more standard names
+    """
+    # Debug: Print data type and shape
+
+    rename_map = {
+        "Station": "name",
+        "Tag": "short_code", 
+        "Easting": "lv95_easting",
+        "Northing": "lv95_northing",
+        "Meters_Above_Sealevel": "elevation_m",
+        "Locationtype": "location_type",
+        "Remarks": "remarks",
+    }
+    
+    return data.rename(columns=rename_map)
+
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Template code for testing the output of the block.
+    """
+    print(f"Test - Output type: {type(output)}")
+    assert output is not None, 'The output is undefined'

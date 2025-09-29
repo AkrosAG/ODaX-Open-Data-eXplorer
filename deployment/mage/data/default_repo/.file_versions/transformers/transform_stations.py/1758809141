@@ -1,0 +1,112 @@
+import unicodedata
+import pandas as pd
+import numpy as np
+from pyproj import Transformer
+
+if 'transformer' not in globals():
+    from mage_ai.data_preparation.decorators import transformer
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+
+@transformer
+def transform(data, *args, **kwargs):
+    """
+    Transform the station data by renaming columns, adding WGS84 coordinates, and normalizing names
+    """
+    
+    rename_map = {
+        "Station": "name",
+        "Tag": "short_code", 
+        "Easting": "lv95_easting",
+        "Northing": "lv95_northing",
+        "Meters_Above_Sealevel": "elevation_m",
+        "Locationtype": "location_type",
+        "Remarks": "remarks",
+    }
+    
+    # Rename columns
+    data = data.rename(columns=rename_map)
+
+    # Normalize station names: remove accents, replace hyphens, and convert to uppercase
+    data['name'] = data['name'].apply(strip_accents)  # Remove accents using NFKD
+    data['name'] = data['name'].str.replace('-', ' ', regex=False)  # Replace hyphens with spaces
+    data['name'] = data['name'].str.strip()  # Remove leading/trailing whitespace
+    data['name'] = data['name'].str.upper()  # Convert to uppercase
+
+
+    
+    # Create transformer from LV95 (EPSG:2056) to WGS84 (EPSG:4326)
+    coord_transformer = Transformer.from_crs('EPSG:2056', 'EPSG:4326', always_xy=True)
+    
+    # Initialize coordinate columns with NaN
+    data['latitude'] = np.nan
+    data['longitude'] = np.nan
+    
+    # Convert only valid coordinates
+    valid_data = data[data['valid_coords']]
+    if len(valid_data) > 0:
+        longitudes, latitudes = coord_transformer.transform(
+            valid_data['lv95_easting'].values, 
+            valid_data['lv95_northing'].values
+        )
+        
+        # Assign converted coordinates back to the original dataframe
+        data.loc[data['valid_coords'], 'latitude'] = latitudes
+        data.loc[data['valid_coords'], 'longitude'] = longitudes
+    
+    # Debug: Print sample coordinates
+    valid_sample = data[data['valid_coords']].iloc[0]
+    print(f"Sample coordinates for {valid_sample['name']}:")
+    print(f"  LV95: E={valid_sample['lv95_easting']}, N={valid_sample['lv95_northing']}")
+    print(f"  WGS84: Lat={valid_sample['latitude']:.6f}, Lon={valid_sample['longitude']:.6f}")
+    
+    print(f"Successfully converted {len(valid_data)} out of {len(data)} stations")
+    
+    # Remove the temporary validation column
+    data = data.drop('valid_coords', axis=1)
+    
+    return data
+
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Test the output of the transformation
+    """
+    assert output is not None, 'The output is undefined'
+    assert len(output) > 0, 'The output DataFrame is empty'
+    
+    # Check that coordinate columns exist
+    required_columns = ['name', 'short_code', 'lv95_easting', 'lv95_northing', 
+                       'latitude', 'longitude', 'elevation_m', 'location_type']
+    
+    for col in required_columns:
+        assert col in output.columns, f'Column {col} is missing from output'
+    
+    # Filter out rows with NaN coordinates for testing
+    valid_coords = output.dropna(subset=['latitude', 'longitude'])
+    
+    if len(valid_coords) == 0:
+        raise AssertionError('No valid coordinates found after conversion')
+    
+    # Check coordinate ranges for Switzerland (only for valid coordinates)
+    print(f"Valid coordinates: {len(valid_coords)} out of {len(output)} stations")
+    print(f"Latitude range: {valid_coords['latitude'].min():.6f} to {valid_coords['latitude'].max():.6f}")
+    print(f"Longitude range: {valid_coords['longitude'].min():.6f} to {valid_coords['longitude'].max():.6f}")
+    
+    assert valid_coords['latitude'].min() >= 45.5, f'Latitude too low for Switzerland: {valid_coords["latitude"].min()}'
+    assert valid_coords['latitude'].max() <= 48.0, f'Latitude too high for Switzerland: {valid_coords["latitude"].max()}'
+    assert valid_coords['longitude'].min() >= 5.5, f'Longitude too low for Switzerland: {valid_coords["longitude"].min()}'
+    assert valid_coords['longitude'].max() <= 11.0, f'Longitude too high for Switzerland: {valid_coords["longitude"].max()}'
+    
+    print(f"Test passed - DataFrame has {len(valid_coords)} stations with valid Swiss coordinates")
+
+
+def strip_accents(s: str) -> str:
+    """Remove accents and diacritical marks from string using NFKD normalization"""
+    if s is None:
+        return s
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+    )

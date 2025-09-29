@@ -1,0 +1,14 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: 2025-09-29 09:25:48.611430
+  name: air quality trigger
+  pipeline_uuid: air_quality
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-09-28 09:25:00
+  status: active
+  token: 6252c2c1d9294a7da7e7ae6dad6bccac
+  variables: {}
