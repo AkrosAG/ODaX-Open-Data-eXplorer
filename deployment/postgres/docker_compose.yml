@@ -40,7 +40,7 @@ services:
       sh -c "
       apt-get update && apt-get install -y postgresql-client &&
       pip install --no-cache-dir -r /app/conf/requirements.txt &&
-      psql -h postgres -U postgres_user -d postgres_db -f /app/script/ddl-nebel.sql &&
+      psql -h postgres -U postgres_user -d postgres_db -f /app/script/ddl-nabel.sql &&
       python /app/script/seed_airpollution_scheme.py &&
       python /app/script/seed_healthinsurance_scheme.py
       "
