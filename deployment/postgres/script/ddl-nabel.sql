@@ -189,18 +189,18 @@ CREATE TABLE IF NOT EXISTS station_measurements (
 );
 
 -- Abgeleitete tägliche Aggregation (Median/Mean etc.) – optional, aber häufig praktisch
-CREATE TABLE IF NOT EXISTS station_daily (
-  station_daily_id  BIGSERIAL PRIMARY KEY,
-  station_id        INT NOT NULL REFERENCES stations(station_id) ON DELETE CASCADE,
-  pollutant_code    TEXT NOT NULL REFERENCES pollutants(code) ON DELETE RESTRICT,
-  date_utc          DATE NOT NULL,
-  agg_value         DOUBLE PRECISION,     -- z.B. Median oder Mittelwert des Tages
-  unit              TEXT,
-  method            TEXT DEFAULT 'median', -- 'median' | 'mean' etc.
-  dataset_id        INT REFERENCES datasets(dataset_id) ON DELETE SET NULL,
-  metadata          JSONB,
-  UNIQUE (station_id, pollutant_code, date_utc, method)
-);
+-- CREATE TABLE IF NOT EXISTS station_daily (
+--   station_daily_id  BIGSERIAL PRIMARY KEY,
+--   station_id        INT NOT NULL REFERENCES stations(station_id) ON DELETE CASCADE,
+--   pollutant_code    TEXT NOT NULL REFERENCES pollutants(code) ON DELETE RESTRICT,
+--   date_utc          DATE NOT NULL,
+--   agg_value         DOUBLE PRECISION,     -- z.B. Median oder Mittelwert des Tages
+--   unit              TEXT,
+--   method            TEXT DEFAULT 'median', -- 'median' | 'mean' etc.
+--   dataset_id        INT REFERENCES datasets(dataset_id) ON DELETE SET NULL,
+--   metadata          JSONB,
+--   UNIQUE (station_id, pollutant_code, date_utc, method)
+-- );
 
 -- Sinnvolle Indizes für typische Abfragen
 CREATE INDEX IF NOT EXISTS ix_station_measurements_station_ts
@@ -210,9 +210,9 @@ CREATE INDEX IF NOT EXISTS ix_station_measurements_pollutant_ts
 CREATE INDEX IF NOT EXISTS ix_station_measurements_ts
   ON station_measurements (ts_utc);
 
-CREATE INDEX IF NOT EXISTS ix_station_daily_station_date
-  ON station_daily (station_id, date_utc);
-CREATE INDEX IF NOT EXISTS ix_station_daily_pollutant_date
-  ON station_daily (pollutant_code, date_utc);
+-- CREATE INDEX IF NOT EXISTS ix_station_daily_station_date
+--   ON station_daily (station_id, date_utc);
+-- CREATE INDEX IF NOT EXISTS ix_station_daily_pollutant_date
+--   ON station_daily (pollutant_code, date_utc);
 
 

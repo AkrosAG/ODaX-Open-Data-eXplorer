@@ -3,3 +3,18 @@ __pycache__
 *.lock
 *.ipynb
 .env
+
+# macOS system files
+.DS_Store
+.DS_Store?
+*.DS_Store
+
+# Mage AI cache and temp files
+**/.cache/
+**/.file_versions/
+**/.operation_history/
+**/.ssh_tunnel/
+**/.logs/
+**/.variables/
+**/mage-ai.db
+

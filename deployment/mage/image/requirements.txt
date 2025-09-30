@@ -1,0 +1,37 @@
+xgboost
+scikit-learn
+pandas
+numpy
+
+# Core plotting libraries
+matplotlib
+seaborn
+requests
+scipy
+plotly
+importlib_metadata
+
+# MLflow and ML tracking - MLflow 3.2.0 with improved Polars support
+mlflow==3.2.0
+polars==0.20.31
+psycopg2-binary
+boto3
+duckdb
+
+# Geospatial libraries
+pyproj
+
+# Additional MLflow dependencies
+sqlalchemy
+alembic
+cloudpickle
+protobuf
+gunicorn
+
+# Model serialization
+joblib
+pickle-mixin
+
+# Jupyter support
+jupyter
+ipykernel
