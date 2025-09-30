@@ -1,1 +1,0 @@
-{"Station": "str", "Tag": "str", "Easting": "int64", "Northing": "int64", "Meters_Above_Sealevel": "int64", "Locationtype": "str", "Remarks": "str"}
