@@ -1,0 +1,40 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: 2025-10-06 07:34:42.516779
+  name: fill_healthinsurance_tables
+  pipeline_uuid: health_insurance
+  schedule_interval: null
+  schedule_type: null
+  settings: null
+  sla: null
+  start_time: null
+  status: active
+  token: 55d89335500b4706908813f77b2e6ca7
+  variables: null
+- description: null
+  envs: []
+  last_enabled_at: 2025-10-06 08:44:55.366288
+  name: good druid
+  pipeline_uuid: health_insurance
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-10-05 08:44:00
+  status: inactive
+  token: a2d7cfec0b5f4a4086f286a8ed043e06
+  variables: {}
+- description: null
+  envs: []
+  last_enabled_at: 2025-10-07 14:57:14.273275
+  name: dazzling sound
+  pipeline_uuid: health_insurance
+  schedule_interval: '@once'
+  schedule_type: time
+  settings: null
+  sla: null
+  start_time: 2025-10-06 14:57:00
+  status: inactive
+  token: 99c5dad44d8f421c82ab74b67187861f
+  variables: {}

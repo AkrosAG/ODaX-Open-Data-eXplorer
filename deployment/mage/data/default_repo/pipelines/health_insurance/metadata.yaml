@@ -1,0 +1,305 @@
+blocks:
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    data_provider: postgres
+    data_provider_profile: postgres
+    dbt: {}
+    disable_query_preprocessing: false
+    export_write_policy: append
+    limit: 1000
+    use_raw_sql: true
+  downstream_blocks:
+  - load_canton_info
+  - load_tariff
+  - load_age_classes
+  - load_class_subgroups
+  - load_franchise_set
+  - load_insurers_info
+  - load_prämien_info
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: sql
+  name: create_tables
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: create_tables
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    data_provider: postgres
+    data_provider_profile: postgres
+    export_write_policy: append
+  downstream_blocks:
+  - load_canton_table
+  - check_cantons
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_canton_info
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks:
+  - create_tables
+  uuid: load_canton_info
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_canton_table
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - load_canton_info
+  uuid: load_canton_table
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    file_path: data_exporters/load_tariff.py
+    file_source:
+      path: data_exporters/load_tariff.py
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_tariff
+  retry_config: null
+  status: updated
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - create_tables
+  uuid: load_tariff
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_age_classes
+  retry_config: null
+  status: updated
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - create_tables
+  uuid: load_age_classes
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_class_subgroups
+  retry_config: null
+  status: updated
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - create_tables
+  uuid: load_class_subgroups
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_franchise_set
+  retry_config: null
+  status: updated
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - create_tables
+  uuid: load_franchise_set
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    file_path: data_loaders/load_insurers_info.py
+    file_source:
+      path: data_loaders/load_insurers_info.py
+  downstream_blocks:
+  - load_insurer
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_insurers_info
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks:
+  - create_tables
+  uuid: load_insurers_info
+- all_upstream_blocks_executed: false
+  color: null
+  configuration:
+    file_path: data_exporters/load_insurer.py
+    file_source:
+      path: data_exporters/load_insurer.py
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_insurer
+  retry_config: null
+  status: updated
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - load_insurers_info
+  uuid: load_insurer
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    file_path: data_loaders/load_prämien_info.py
+    file_source:
+      path: data_loaders/load_prämien_info.py
+  downstream_blocks:
+  - check_cantons
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_prämien_info
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks:
+  - create_tables
+  uuid: load_prämien_info
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - check_regions
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: check_cantons
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - load_prämien_info
+  - load_canton_info
+  uuid: check_cantons
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - parse_fee_regions
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: check_regions
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - check_cantons
+  uuid: check_regions
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    file_path: transformers/parse_fee_regions.py
+    file_source:
+      path: transformers/parse_fee_regions.py
+  downstream_blocks:
+  - load_fee_regions
+  - map_regions
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: parse_fee_regions
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - check_regions
+  uuid: parse_fee_regions
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_fee_regions
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - parse_fee_regions
+  uuid: load_fee_regions
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: map_regions
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - parse_fee_regions
+  uuid: map_regions
+cache_block_output_in_memory: false
+callbacks: []
+concurrency_config: {}
+conditionals: []
+created_at: '2025-10-01 15:03:58.351137+00:00'
+data_integration: null
+description: null
+executor_config: {}
+executor_count: 1
+executor_type: null
+extensions: {}
+name: health_insurance
+notification_config: {}
+remote_variables_dir: null
+retry_config: {}
+run_pipeline_in_one_process: false
+settings:
+  triggers: null
+spark_config: {}
+tags: []
+type: python
+uuid: health_insurance
+variables_dir: /home/src/default_repo
+widgets: []
