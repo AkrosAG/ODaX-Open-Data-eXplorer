@@ -4,6 +4,7 @@ if 'data_loader' not in globals():
     from mage_ai.data_preparation.decorators import data_loader
 if 'test' not in globals():
     from mage_ai.data_preparation.decorators import test
+from default_repo.utils.constants import CSV_FEES
 
 
 @data_loader
@@ -15,7 +16,6 @@ def load_data(*args, **kwargs):
         dataframe
     """
 
-    CSV_FEES = '/home/src/raw_data/healthinsurance/Prämien_CH.csv'
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)
     df = df.rename(columns=str.strip)
     

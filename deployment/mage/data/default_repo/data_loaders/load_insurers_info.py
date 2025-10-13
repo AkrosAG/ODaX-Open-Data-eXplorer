@@ -3,6 +3,7 @@ if 'data_loader' not in globals():
 if 'test' not in globals():
     from mage_ai.data_preparation.decorators import test
 import pandas as pd
+from default_repo.utils.constants import XLS_INSURERS, sheets_insurer
 
 @data_loader
 def load_data_from_file(*args, **kwargs):
@@ -12,9 +13,9 @@ def load_data_from_file(*args, **kwargs):
     Returns:
        dataframe 
     """
-    for sheet in ["Zugelassene Krankenversicherer", "zugelassene krankenversicherer"]:
+    for sheet in sheets_insurer:
         try:
-            XLS_INSURERS = '/home/src/raw_data/healthinsurance/BagNr_Mapping_KV.xlsx'
+            
             df_insur = pd.read_excel(XLS_INSURERS, sheet_name=sheet)
             df_insur = df_insur.rename(columns=str.strip)
 

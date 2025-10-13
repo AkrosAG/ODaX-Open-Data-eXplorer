@@ -5,16 +5,14 @@ from mage_ai.io.config import ConfigFileLoader
 from mage_ai.io.postgres import Postgres
 from os import path
 import pandas as pd
+from default_repo.utils.constants import list_tariff
 
 @data_exporter
 def export_data_to_postgres(df_cantons, **kwargs) -> None:
     """
     Saving the information about the tariffs (fixed code) to the postgres database.
     """
-    list_tariff = [("TAR-BASE", "Grundversicherung"),
-    ("TAR-DIV", "Telmed/Div."),
-    ("TAR-HMO", "HMO"),
-    ("TAR-HAM", "Hausarztmodell")]
+
     
     list_tariff_df = pd.DataFrame(list_tariff, columns=['code','label'])
     print(list_tariff_df)

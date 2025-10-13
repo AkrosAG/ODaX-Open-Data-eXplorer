@@ -7,25 +7,24 @@ from mage_ai.io.config import ConfigFileLoader
 
 
 @data_exporter
-def export_data(data, *args, **kwargs):
+def export_data_to_postgres(df, **kwargs) -> None:
+    print(df)
     """
-    Exporting fee regions to a PostgreSQL database.
+    Exporting the informations about the different insurers. 
     """
-    #rename according columns:
     schema_name = 'public'  
     config_path = path.join(get_repo_path(), 'io_config.yaml')
     config_profile = 'postgres'
-  
+
     with Postgres.with_config(ConfigFileLoader(config_path, config_profile)) as loader:
-        loader.execute("TRUNCATE TABLE public.fee_regions RESTART IDENTITY CASCADE;")
-        loader.export(
-            data,
+        loader.execute("TRUNCATE TABLE public.municipalities RESTART IDENTITY CASCADE;")
+        loader.export(df,
             schema_name,
-            'fee_regions',
+            'municipalities',
             index=False,
             if_exists='replace',
-        )
-      
-        print("Fee regions inserted successfully!")
+            )
+               
+        print("Municipalities inserted successfully!")
 
-
+        

@@ -24,10 +24,10 @@ CREATE TABLE IF NOT EXISTS fee_regions (
 
 CREATE TABLE IF NOT EXISTS municipalities (
   municipality_id SERIAL PRIMARY KEY,
-  name            TEXT NOT NULL,
+  municipality    TEXT NOT NULL,
   canton_code     CHAR(2) NOT NULL REFERENCES cantons(canton_code) ON DELETE RESTRICT,
   fee_region_id   INT REFERENCES fee_regions(fee_region_id) ON DELETE SET NULL,
-  UNIQUE (name, canton_code)
+  UNIQUE (municipality, canton_code)
 );
 
 CREATE TABLE IF NOT EXISTS insurers (

@@ -5,13 +5,14 @@ from mage_ai.io.config import ConfigFileLoader
 from mage_ai.io.postgres import Postgres
 from os import path
 import pandas as pd
+from default_repo.utils.constants import list_franchise
 
 @data_exporter
 def export_data_to_postgres(df_cantons, **kwargs) -> None:
     """
     Export the data to the franchises (fixed code) to the PostgreSQL database.
     """
-    list_franchise = [0, 100, 200, 300, 400, 500, 600, 1000, 1500, 2000, 2500]
+    
     
     list_franchise_df = pd.DataFrame(list_franchise, columns=['amount'])
     print(list_franchise_df)

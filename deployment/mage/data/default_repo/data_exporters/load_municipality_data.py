@@ -1,34 +1,33 @@
 if 'data_exporter' not in globals():
     from mage_ai.data_preparation.decorators import data_exporter
-from mage_ai.settings.repo import get_repo_path
-from mage_ai.io.config import ConfigFileLoader
-from mage_ai.io.postgres import Postgres
 from os import path
+from mage_ai.settings.repo import get_repo_path
+from mage_ai.io.postgres import Postgres
+from mage_ai.io.config import ConfigFileLoader
+import numpy as np
 import pandas as pd
-from default_repo.utils.constants import list_age
+
+
 
 @data_exporter
-def export_data_to_postgres(df_cantons, **kwargs) -> None:
+def export_data(data, *args, **kwargs):
     """
-    Exporting the information about ages classes (fixed code) to the postgres database.
+    Exporting fee regions to a PostgreSQL database.
     """
-
-    
-    list_age_df = pd.DataFrame(list_age, columns=['code','label'])
-    print(list_age_df)
-
+    print(data)
+    #rename according columns:
     schema_name = 'public'  
     config_path = path.join(get_repo_path(), 'io_config.yaml')
     config_profile = 'postgres'
-
+  
     with Postgres.with_config(ConfigFileLoader(config_path, config_profile)) as loader:
-        loader.execute("TRUNCATE TABLE public.age_classes RESTART IDENTITY CASCADE;")
+        loader.execute("TRUNCATE TABLE public.municipalities RESTART IDENTITY CASCADE;")
         loader.export(
-            list_age_df,
+            data,
             schema_name,
-            'age_classes',
+            'municipalities',
             index=False,
             if_exists='replace',
         )
-        
-        print("Age classes inserted successfully!")
+      
+        print("Fee regions inserted successfully!")

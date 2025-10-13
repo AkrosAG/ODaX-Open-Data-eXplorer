@@ -5,18 +5,15 @@ from mage_ai.io.config import ConfigFileLoader
 from mage_ai.io.postgres import Postgres
 from os import path
 import pandas as pd
+from default_repo.utils.constants import list_age_subgroup
+
 
 @data_exporter
 def export_data_to_postgres(df_cantons, **kwargs) -> None:
     """
     Export the information about the age subgroup (fixed code) to the PostgreSQL database.
     """
-    list_age_subgroup = [
-    ("K1", "Einzelkind", "AKL-KIN"),
-    ("K3", "1 Geschwister", "AKL-KIN"),
-    ("K4", "1 Geschwister", "AKL-KIN"),
-    ("K5", "2+ Geschwister", "AKL-KIN"),
-    ]
+
     
     list_age_subgroup_df = pd.DataFrame(list_age_subgroup, columns=['code','label','age_class_code'])
     print(list_age_subgroup_df)

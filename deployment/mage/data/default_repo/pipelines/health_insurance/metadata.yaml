@@ -78,7 +78,7 @@ blocks:
   language: python
   name: load_tariff
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -94,7 +94,7 @@ blocks:
   language: python
   name: load_age_classes
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -110,7 +110,7 @@ blocks:
   language: python
   name: load_class_subgroups
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -126,7 +126,7 @@ blocks:
   language: python
   name: load_franchise_set
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -152,7 +152,7 @@ blocks:
   upstream_blocks:
   - create_tables
   uuid: load_insurers_info
-- all_upstream_blocks_executed: false
+- all_upstream_blocks_executed: true
   color: null
   configuration:
     file_path: data_exporters/load_insurer.py
@@ -165,7 +165,7 @@ blocks:
   language: python
   name: load_insurer
   retry_config: null
-  status: updated
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -257,7 +257,7 @@ blocks:
   language: python
   name: load_fee_regions
   retry_config: null
-  status: executed
+  status: updated
   timeout: null
   type: data_exporter
   upstream_blocks:
@@ -266,7 +266,8 @@ blocks:
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
-  downstream_blocks: []
+  downstream_blocks:
+  - load_inser_region_fee_id
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -279,6 +280,42 @@ blocks:
   upstream_blocks:
   - parse_fee_regions
   uuid: map_regions
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - load_municipality_data
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_inser_region_fee_id
+  retry_config: null
+  status: executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - map_regions
+  uuid: load_inser_region_fee_id
+- all_upstream_blocks_executed: true
+  color: null
+  configuration:
+    file_path: data_exporters/load_municipality_data.py
+    file_source:
+      path: data_exporters/load_municipality_data.py
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_municipality_data
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - load_inser_region_fee_id
+  uuid: load_municipality_data
 cache_block_output_in_memory: false
 callbacks: []
 concurrency_config: {}
