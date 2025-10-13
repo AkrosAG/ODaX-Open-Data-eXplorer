@@ -19,8 +19,13 @@ from io import StringIO
 @transformer
 def export_data(df_fr, *args, **kwargs):
     """
-    Exporting fee regions to a PostgreSQL database.
+    Add for all the cantons and according fee regions the municipalities.
+
+    returns:
+    df with all the municipalities as well as canton_code and fee_region number
     """
+
+    #function to get the municpalities when there are multiple fee regions for the canton
     def GetMunicipalities_PerCanton(Canton: str) -> List[str]:
 
         # Get today's date in DD-MM-YYYY format
@@ -42,7 +47,7 @@ def export_data(df_fr, *args, **kwargs):
         df = pd.read_csv(StringIO(data))
         return df[df["Canton"] == Canton]["Name"].values.tolist()
     
-
+    #function to get the municpalities when there is just one fee region per canton
     def GetMunicipalities_MultipleFeeRegions(Kanton: str, Region: str) -> Optional[List[str]]:
 
         try:
@@ -72,10 +77,9 @@ def export_data(df_fr, *args, **kwargs):
         return None
 
 
-
+    #Filtering
     pairs = set(df_fr.keys())
     df_count = df_fr.groupby('canton_code')['region_no'].count().reset_index()
-    counts = len(df_count)
     multi_cantons = df_count[df_count['region_no']>1]['canton_code'].values
     single_cantons = df_count[df_count['region_no']==1]['canton_code'].values
     #dictionnary single cantons
@@ -83,10 +87,9 @@ def export_data(df_fr, *args, **kwargs):
     single_pair_by_canton = dict(zip(df_fr_filtered['canton_code'], df_fr_filtered['region_no']))
     #dictionnary multi cantons
     df_fr_filtered = df_fr[df_fr['canton_code'].isin(multi_cantons)]
-    multi_pair_by_canton = dict(zip(df_fr_filtered['canton_code'], df_fr_filtered['region_no']))
+
     # 1) Single-region cantons: call once per canton
     single_muni_by_canton: dict[str, list[str]] = {}
-    muni_by_pair: dict[tuple[str, int], list[str]] = {}
 
     for cc in single_cantons:
         rn = single_pair_by_canton[cc]
@@ -97,8 +100,9 @@ def export_data(df_fr, *args, **kwargs):
         clean = sorted({str(m).strip() for m in lst if m and str(m).strip()})
         single_muni_by_canton[cc,rn] = clean
 
-    #rename according columns:
     # 2) Multi-region cantons: call once per (canton, region_no)
+    muni_by_pair: dict[tuple[str, int], list[str]] = {}
+
     for i in range(len(df_fr_filtered)):
         cc = str(df_fr_filtered.iloc[[i]]['canton_code'].values[0])
         rn = int(df_fr_filtered.iloc[[i]]['region_no'].values[0])
@@ -108,7 +112,8 @@ def export_data(df_fr, *args, **kwargs):
             lst = []
         clean = sorted({str(m).strip() for m in lst if m and str(m).strip()})
         muni_by_pair[(cc, rn)] = clean
-
+    
+    #add to a df
     records = []
     for (canton_code,region_no), municipality in muni_by_pair.items():
         for m in municipality:
@@ -123,7 +128,6 @@ def export_data(df_fr, *args, **kwargs):
 
     df_sin = pd.DataFrame(records)
     
-
     df = pd.concat([df_sin, df_muni])
 
     return df

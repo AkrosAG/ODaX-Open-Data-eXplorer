@@ -9,7 +9,7 @@ import pandas as pd
 @data_exporter
 def export_data_to_postgres(df, **kwargs) -> None:
     """
-    Exporting the informations about the different insurers. 
+    Exporting the informations about the different insurers to the postgres db. 
     """
     schema_name = 'public'  
     config_path = path.join(get_repo_path(), 'io_config.yaml')

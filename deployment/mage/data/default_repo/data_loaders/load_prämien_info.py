@@ -13,7 +13,7 @@ def load_data(*args, **kwargs):
     Load the data from the file "Prämien_CH.csv"
 
     Returns:
-        dataframe
+        dataframe with Excel information
     """
 
     df = pd.read_csv(CSV_FEES, sep=";", encoding="latin1").rename(columns=str.strip)

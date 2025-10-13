@@ -14,7 +14,7 @@ def transform(df, *args, **kwargs):
         args: The output from any additional upstream blocks (if applicable)
 
     Returns:
-        dataframe
+        dataframe with fee_region number and canton_code
     """
     # Specify your transformation logic here
     df_fr = df.loc[df["Kanton"].notna() & df["Region"].notna(), ["Kanton", "Region"]]

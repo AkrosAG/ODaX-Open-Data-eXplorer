@@ -11,7 +11,7 @@ def load_data_from_file(*args, **kwargs):
     Loading the data from the insurances to a df
 
     Returns:
-       dataframe 
+       dataframe with insurer informations
     """
     for sheet in sheets_insurer:
         try:

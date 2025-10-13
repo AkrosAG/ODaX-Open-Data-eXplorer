@@ -12,9 +12,8 @@ import pandas as pd
 @data_exporter
 def export_data(data, *args, **kwargs):
     """
-    Exporting fee regions to a PostgreSQL database.
+    Exporting municipalities to a PostgreSQL database.
     """
-    print(data)
     #rename according columns:
     schema_name = 'public'  
     config_path = path.join(get_repo_path(), 'io_config.yaml')
@@ -30,4 +29,4 @@ def export_data(data, *args, **kwargs):
             if_exists='replace',
         )
       
-        print("Fee regions inserted successfully!")
+        print("Municipalities inserted successfully!")

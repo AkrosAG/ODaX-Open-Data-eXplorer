@@ -8,7 +8,7 @@ from os import path
 @data_exporter
 def export_data_to_postgres(df_cantons, **kwargs) -> None:
     """
-    Exporting the data in the table "cantons" to the postgres database.
+    Exporting the data in the table "df_cantons" to the postgres database.
     """
     print(df_cantons)
     schema_name = 'public'  
