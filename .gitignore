@@ -3,6 +3,7 @@ __pycache__
 *.lock
 *.ipynb
 .env
+**/venv/
 
 # macOS system files
 .DS_Store
