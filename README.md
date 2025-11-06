@@ -18,16 +18,16 @@ Install ```wsl``` (with the Ubuntu distribution) on your Windows dev machine or 
 
 ## Installation of ODaX
 1) Clone the repository https://github.com/AkrosAG/ODaX-Open-Data-eXplorer via git in the wsl filesystem, e.g., under ```/home/{USER}```.
-2) Checkout the branch ```develop```.
+2) Checkout the branch ```main```.
 3) Delete the folder ```.vitualenvs``` in ```/home/{USER}``` if it exists.
 4) Navigate to the root directory of your project ```/home/{USER}/ODaX-Open-Data-eXplorer```.
 5) Create a virtual environment via ```python3.11 -m venv venv```. At the moment, apache superset requires python 3.11.
-6) If step 4 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
+6) If step 5 does not work, you may need to install the venv extension for your python, i.e., by ```sudo apt install python3.X-venv```. After the installation, try again to create a virtual environment.
 7) Using ```wsl```, activate the virtual environment by ```source venv/bin/activate```.
-8) Update pip via ```pip install --upgrade pip```
+8) Update pip via ```pip install --upgrade pip``` (Is this step really necessary and if so why?) 
 9) Install ```poetry``` in the virtual environment via ```pip install poetry```.
 10) Install the dependencies via ```poetry install --no-root```.
-11) Go to the Pycharm ```Settings```, then the ```Project: ODaX-Open-Data-eXplorer```, and then the ```Project Interpreter```.
+11) Go to the Pycharm ```Settings```, then the ```Project: ODaX-Open-Data-eXplorer```, and then the ```Python Interpreter```.
 12) Click on ```Add interpreter``` and select ```On WSL```.
 13) Add an ```existing``` python interpreter and select the python in the previously created venv ```/home/{USER}/ODaX-Open-Data-eXplorer/venv/bin/python3.X```.
 14) Run the python scripts from the root directory in the terminal or use the Pycharm ```Run```/```Debug``` functionality. Remember to set the ```Working directory``` in the ```Run/ Debug configuration``` to the project root directory.
@@ -44,7 +44,7 @@ Please follow the installation steps documented at https://www.postgresql.org/do
 Mainly, the command ```sudo apt install postgresql``` that needs to be executed.
 
 ### Installation of the superset connector to postgresql
-``` sudo apt install libpq-dev```
+```sudo apt install libpq-dev```\
 ```poetry add psycopg2```
 
 ## .env file
