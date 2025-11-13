@@ -172,3 +172,93 @@ ip addr show eth0
 4) Test the connection by clicking on ```Test connection```. If the connection is fine, click on ```OK```.
 5) Refresh the connections to load and visualize the content of your containers databases.
 
+
+
+
+# Postgres and Superset Integration for Health Insurance Data
+
+This repository includes scripts to load the Swiss health insurance premiums into PostgreSQL so the data can be explored in Apache Superset.
+
+Prerequisites
+- WSL Ubuntu or Ubuntu shell
+- podman (or use your own PostgreSQL), and psql client installed
+- A PostgreSQL password stored as a Podman secret named pg_password (see below)
+
+1) Start a local PostgreSQL with Podman
+- Create the secret (once):
+  echo "yourStrongPassword" | podman secret create pg_password -
+- Start the container:
+  ./infrastructure/local/setup_odax_pg.sh
+
+This starts postgres:15 on localhost:5432 with:
+- DB: odax
+- User: odax
+- Password: provided via secret pg_password
+
+2) Load health insurance premiums into PostgreSQL
+- Export PGPASSWORD for psql to authenticate:
+  export PGPASSWORD=yourStrongPassword
+- Run the loader script:
+  ./infrastructure/local/load_healthinsurance_to_pg.sh
+
+The script will:
+- Create schema odax and table odax.healthinsurance_premiums if they do not exist
+- Load data from data/healthinsurance/Prämien_CH.csv (semicolon-separated, Latin-1 encoding)
+- Create a view odax.v_healthinsurance_premiums with clean column names
+
+3) Connect Apache Superset to the database
+- In Superset, add a database connection with:
+  postgresql+psycopg2://odax:yourStrongPassword@host.docker.internal:5432/odax
+  Note: If Superset runs in Docker on Windows, use host.docker.internal to reach Postgres exposed on the host.
+- Explore the dataset by adding the table or view:
+  odax.v_healthinsurance_premiums (recommended)
+  or
+  odax.healthinsurance_premiums
+
+Column reference (v_healthinsurance_premiums)
+- insurer_bag_code (text)
+- canton (text)
+- territory (text)
+- business_year (int)
+- survey_year (int)
+- fee_region (text)
+- age_class (text)
+- accident_coverage (text)
+- tariff_code (text)
+- tariff_type (text)
+- sub_age_group (text)
+- franchise_level_code (text)
+- franchise_label (text)
+- premium_chf (numeric)
+- is_base_p (boolean)
+- is_base_f (boolean)
+- tariff_label (text)
+
+Troubleshooting
+- psql: could not connect to server: Ensure the container is running: podman ps
+- Authentication failure: Make sure PGPASSWORD is exported and matches the pg_password secret used for the container.
+- Encoding issues: The loader enforces LATIN1 client encoding to correctly load the German characters present in the CSV header and data.
+
+
+# Poetry environment setup (quickstart)
+
+You can use Poetry to manage the virtual environment and dependencies for this project (Python 3.11 is required due to Superset):
+
+Recommended (Poetry manages the venv):
+- Ensure Python 3.11 is installed in WSL/Ubuntu.
+- Install Poetry (one-time): pipx install poetry or pip install --user poetry
+- Tell Poetry to use Python 3.11: poetry env use 3.11
+- Install dependencies (including dev tools): poetry install --with dev
+- Activate the environment: poetry shell
+
+Alternative (aligns with steps above in README):
+- Create venv manually: python3.11 -m venv venv
+- Activate: source venv/bin/activate
+- Install Poetry into that venv: pip install poetry
+- Install dependencies into the active venv: poetry install --no-root --with dev
+
+Notes
+- IDE: In PyCharm, set the interpreter to the Poetry venv (poetry env info --path) or to venv/bin/python if you created it manually.
+- Dev dependencies: pytest and flake8 are installed only if you include the dev group (use --with dev). For a slimmer runtime-only env, omit --with dev.
+- Common checks: poetry check (validates pyproject), poetry lock (updates lockfile), poetry run pytest (runs tests).
+

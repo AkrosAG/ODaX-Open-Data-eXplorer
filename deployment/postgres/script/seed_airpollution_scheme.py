@@ -12,8 +12,7 @@ from sqlalchemy.engine import Engine
 
 load_dotenv()
 
-
-POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+HOST_PORT = os.getenv("HOST_PORT")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
 POSTGRES_USER = os.getenv("POSTGRES_USER")
